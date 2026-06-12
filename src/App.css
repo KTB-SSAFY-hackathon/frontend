@@ -1,15 +1,21 @@
 .app-shell {
+  width: 100%;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 24px;
+  padding: 0;
   background: #000;
+  overflow-x: auto;
 }
 
 .app-screen {
-  width: min(390px, 100%);
+  flex: 0 0 390px;
+  width: 390px;
+  min-width: 390px;
+  max-width: 390px;
   height: 100vh;
+  height: 100dvh;
   background: #fff;
   color: #111;
   border-radius: 32px;
@@ -21,9 +27,12 @@
 
 .app-header,
 .app-footer {
-  padding: 24px 20px;
   text-align: center;
   background: #fff;
+}
+
+.app-header {
+  padding: 24px 20px;
 }
 
 .app-header {
@@ -32,50 +41,121 @@
 
 .app-footer {
   margin-top: auto;
-  border-top: 1px solid #f1f1f1;
+  min-height: 72px;
+  padding: 10px 20px 14px;
+  border-top: 0;
+  background: #fff;
+  overflow: visible;
+  display: flex;
+  align-items: flex-end;
 }
 
 .app-main {
   flex: 1;
+  width: 100%;
+  height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 24px;
+  min-height: 0;
 }
 
-.app-panel {
+.immersive-screen .app-main {
+  flex: 1 1 auto;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-subtitle {
+  margin: 0 0 6px;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.tab-bar {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
   width: 100%;
+  min-height: 50px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #fff;
+  align-items: center;
+}
+
+.tab-item {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  align-items: center;
   justify-content: center;
-  text-align: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 5px 4px;
+  border-radius: 999px;
+  color: #222;
+  text-decoration: none;
+  position: relative;
+  transition: color 0.2s ease, transform 0.2s ease;
 }
 
-.app-panel h2 {
-  margin: 0;
-  font-size: clamp(1.75rem, 4vw, 2.25rem);
+.tab-item.active,
+.tab-item:hover {
+  color: #016EFA;
 }
 
-.app-panel p {
-  margin: 0;
-  line-height: 1.7;
-  color: #444;
-  font-size: 1rem;
+.tab-item.active {
+  transform: translateY(-10px);
+}
+
+.tab-icon {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.tab-label {
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 @media (max-width: 420px) {
   .app-shell {
-    padding: 16px;
+    justify-content: flex-start;
   }
 
   .app-header,
-  .app-footer,
   .app-main {
     padding: 18px;
   }
 
+  .app-footer {
+    min-height: 68px;
+    padding: 8px 16px 12px;
+  }
+
   .app-screen {
     border-radius: 24px;
+  }
+
+  .tab-bar {
+    gap: 2px;
+    padding: 0 6px;
+  }
+
+  .tab-item {
+    min-height: 46px;
+    padding: 5px 2px;
   }
 }

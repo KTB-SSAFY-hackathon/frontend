@@ -1,0 +1,20 @@
+.app-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: center;
+  text-align: center;
+}
+
+.app-panel h2 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+}
+
+.app-panel p {
+  margin: 0;
+  line-height: 1.7;
+  color: #444;
+  font-size: 1rem;
+}
