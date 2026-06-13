@@ -1,3 +1,4 @@
+import insertedImage from '../assets/이미지데이터삽입.png'
 import photo1 from '../assets/에디터1.png'
 import photo2 from '../assets/에디터2.png'
 import photo3 from '../assets/에디터3.png'
@@ -17,6 +18,7 @@ import photo16 from '../assets/에디터16.png'
 import type { GalleryPhoto } from '../types/editor'
 
 export const fixedGalleryPhotos: GalleryPhoto[] = [
+  { id: 'fixed-editor-photo-inserted', name: '이미지 데이터 삽입', src: insertedImage },
   { id: 'fixed-editor-photo-1', name: '에디터 1', src: photo1 },
   { id: 'fixed-editor-photo-2', name: '에디터 2', src: photo2 },
   { id: 'fixed-editor-photo-3', name: '에디터 3', src: photo3 },

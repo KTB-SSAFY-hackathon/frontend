@@ -1,27 +1,57 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Player } from '@remotion/player'
 import type { PlayerRef } from '@remotion/player'
 import { Link } from 'react-router-dom'
 import warningIcon from '../assets/경고.png'
 import { fixedVideoAssets } from '../data/videoAssets'
 import { VideoComposition } from '../remotion/VideoComposition'
+import type { MediaDetection, VideoAnalyzeFrame } from '../types/api'
 import type { MusicTrack, TextOverlay, VideoAsset } from '../types/video'
+import { analyzeVideoFile, fileFromAssetSource } from '../utils/backendApi'
 import { clamp, formatTime } from '../utils/video'
 import './VideoEditorPage.css'
 
-type VideoPanel = 'cut' | 'music' | 'graphic' | 'text' | 'pip' | 'effect'
+type VideoPanel = 'music' | 'text' | 'catch'
+type VideoCatchItem = {
+  id: string
+  assetId: string
+  assetName: string
+  label: string
+  trackId?: number
+  frameHits: number
+}
+type VideoPreviewCatchRegion = {
+  id: string
+  catchItemId: string
+  label: string
+  left: number
+  top: number
+  width: number
+  height: number
+  active: boolean
+}
 
 const AI_SCAN_DELAY_MS = 3000
-const mockVideoRiskTargets = [
-  { id: 'video-face', label: '얼굴' },
-  { id: 'video-plate', label: '번호판' },
-  { id: 'video-location', label: '위치정보' },
-] as const
 const videoRiskLevels = [
   { key: 'danger', label: '위험', description: '가려진 요소가 부족해요' },
   { key: 'good', label: '양호', description: '일부 요소가 보호됐어요' },
   { key: 'safe', label: '안전', description: '공유 가능한 수준이에요' },
 ] as const
+const videoDetectionLabelMap: Record<string, string> = {
+  school_logo: '학교명패',
+  name_tag: '교복/명찰',
+  address: '주소',
+  gps: '위치정보',
+  recording_date: '촬영일시',
+  device: '기기정보',
+  car_plate: '번호판',
+  card_num: '카드번호',
+  name: '이름',
+  phone: '전화번호',
+  resident_num: '주민번호',
+  face: '얼굴',
+  unknown: '위험 요소',
+}
 
 const defaultOverlay: Omit<TextOverlay, 'id' | 'text'> = {
   start: 0,
@@ -43,14 +73,112 @@ function getVideoRiskLevel(protectionProgress: number) {
   return videoRiskLevels[0]
 }
 
+function getVideoDetectionLabel(label: string) {
+  return videoDetectionLabelMap[label] ?? label
+}
+
+function getVideoCatchItemId(assetId: string, detection: MediaDetection) {
+  return detection.trackId !== undefined
+    ? `${assetId}:${detection.label}:${detection.trackId}`
+    : `${assetId}:${detection.detectionId}`
+}
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function buildVideoCatchItems(assets: VideoAsset[]) {
+  const groupedItems = new Map<string, VideoCatchItem>()
+
+  assets.forEach((asset) => {
+    asset.analysis?.result?.frames.forEach((frame) => {
+      frame.detections.forEach((detection) => {
+        const itemId = getVideoCatchItemId(asset.id, detection)
+        const currentItem = groupedItems.get(itemId)
+
+        if (currentItem) {
+          currentItem.frameHits += 1
+          return
+        }
+
+        groupedItems.set(itemId, {
+          id: itemId,
+          assetId: asset.id,
+          assetName: asset.name,
+          label: getVideoDetectionLabel(detection.label),
+          trackId: detection.trackId,
+          frameHits: 1,
+        })
+      })
+    })
+  })
+
+  return Array.from(groupedItems.values())
+}
+
+function getCurrentVideoPlaybackState(assets: VideoAsset[], currentTime: number, fps: number) {
+  let elapsedDuration = 0
+
+  for (const asset of assets) {
+    const assetEnd = elapsedDuration + asset.duration
+    if (currentTime < assetEnd || asset === assets[assets.length - 1]) {
+      const assetTime = Math.max(0, currentTime - elapsedDuration)
+      const analysisFps = asset.analysis?.result?.video.fps ?? fps
+      return {
+        asset,
+        assetTime,
+        frameNumber: Math.floor(assetTime * analysisFps),
+      }
+    }
+
+    elapsedDuration = assetEnd
+  }
+
+  return null
+}
+
+function getCurrentVideoFrame(frames: VideoAnalyzeFrame[], frameNumber: number) {
+  return frames.find((frame) => frameNumber >= frame.startFrame && frameNumber <= frame.endFrame) ?? null
+}
+
+function getPreviewCatchRegions(
+  asset: VideoAsset,
+  frameNumber: number,
+  disabledItemsById: Record<string, boolean>,
+) {
+  const currentFrame = getCurrentVideoFrame(asset.analysis?.result?.frames ?? [], frameNumber)
+  if (!currentFrame) return []
+
+  return currentFrame.detections
+    .map<VideoPreviewCatchRegion>((detection) => {
+      const [left, top, right, bottom] = detection.bboxNorm
+      const catchItemId = getVideoCatchItemId(asset.id, detection)
+
+      return {
+        id: detection.detectionId,
+        catchItemId,
+        label: getVideoDetectionLabel(detection.label),
+        left: clampPercent(left * 100),
+        top: clampPercent(top * 100),
+        width: clampPercent((right - left) * 100),
+        height: clampPercent((bottom - top) * 100),
+        active: disabledItemsById[catchItemId] !== true,
+      }
+    })
+}
+
 export function VideoEditorPage() {
   const videoInputRef = useRef<HTMLInputElement>(null)
   const urlsRef = useRef<string[]>([])
   const aiScanTimerRef = useRef<number | null>(null)
+  const analysisTasksRef = useRef<Record<string, Promise<void>>>({})
+  const metadataTasksRef = useRef<Record<string, Promise<void>>>({})
+  const videosRef = useRef<VideoAsset[]>([])
   const [videos, setVideos] = useState<VideoAsset[]>(fixedVideoAssets)
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([])
   const [editingVideos, setEditingVideos] = useState<VideoAsset[] | null>(null)
   const [pendingVideos, setPendingVideos] = useState<VideoAsset[] | null>(null)
+  const [analysisNotice, setAnalysisNotice] = useState('')
 
   useEffect(() => () => {
     urlsRef.current.forEach((url) => URL.revokeObjectURL(url))
@@ -60,17 +188,115 @@ export function VideoEditorPage() {
   }, [])
 
   useEffect(() => {
-    fixedVideoAssets.forEach((videoAsset) => {
-      const probe = document.createElement('video')
-      probe.preload = 'metadata'
-      probe.src = videoAsset.src
+    videosRef.current = videos
+  }, [videos])
+
+  const ensureVideoMetadata = useCallback((videoId: string, src: string) => {
+    const existingTask = metadataTasksRef.current[videoId]
+    if (existingTask) return existingTask
+
+    const probe = document.createElement('video')
+    probe.preload = 'metadata'
+
+    const metadataTask = new Promise<void>((resolve) => {
+      const finalize = () => {
+        delete metadataTasksRef.current[videoId]
+        probe.removeAttribute('src')
+        probe.load()
+        resolve()
+      }
+
       probe.onloadedmetadata = () => {
-        setVideos((currentVideos) => currentVideos.map((currentVideo) => (
-          currentVideo.id === videoAsset.id ? { ...currentVideo, duration: probe.duration } : currentVideo
-        )))
+        const nextDuration = Number.isFinite(probe.duration) && probe.duration > 0 ? probe.duration : null
+        if (nextDuration !== null) {
+          setVideos((currentVideos) => currentVideos.map((currentVideo) => (
+            currentVideo.id === videoId
+              ? { ...currentVideo, duration: nextDuration }
+              : currentVideo
+          )))
+        }
+
+        finalize()
+      }
+
+      probe.onerror = () => {
+        finalize()
       }
     })
+
+    metadataTasksRef.current[videoId] = metadataTask
+    probe.src = src
+    return metadataTask
   }, [])
+
+  useEffect(() => {
+    fixedVideoAssets.forEach((videoAsset) => {
+      void ensureVideoMetadata(videoAsset.id, videoAsset.src)
+    })
+  }, [ensureVideoMetadata])
+
+  function updateVideoAnalysis(videoId: string, nextAnalysis: VideoAsset['analysis']) {
+    setVideos((currentVideos) => currentVideos.map((video) => (
+      video.id === videoId
+        ? {
+            ...video,
+            analysis: nextAnalysis,
+          }
+        : video
+    )))
+  }
+
+  function waitForScanOverlay() {
+    return new Promise<void>((resolve) => {
+      aiScanTimerRef.current = window.setTimeout(() => {
+        aiScanTimerRef.current = null
+        resolve()
+      }, AI_SCAN_DELAY_MS)
+    })
+  }
+
+  function startVideoAnalysis(videoId: string, selectedFile?: File, fallbackVideo?: VideoAsset) {
+    const currentVideo = videosRef.current.find((video) => video.id === videoId) ?? fallbackVideo
+    if (!currentVideo) return Promise.resolve()
+
+    if (currentVideo.analysis?.status === 'success') {
+      return Promise.resolve()
+    }
+
+    const existingTask = analysisTasksRef.current[videoId]
+    if (existingTask) {
+      return existingTask
+    }
+
+    updateVideoAnalysis(videoId, {
+      status: 'loading',
+      result: currentVideo.analysis?.result,
+    })
+
+    const analysisTask = (async () => {
+      try {
+        const fileToAnalyze = selectedFile ?? await fileFromAssetSource(currentVideo.src, currentVideo.name)
+        const result = await analyzeVideoFile(fileToAnalyze)
+        updateVideoAnalysis(videoId, {
+          status: 'success',
+          result,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '영상 분석에 실패했습니다.'
+        updateVideoAnalysis(videoId, {
+          status: 'error',
+          result: currentVideo.analysis?.result,
+          errorMessage: message,
+        })
+        setAnalysisNotice(message)
+      } finally {
+        delete analysisTasksRef.current[videoId]
+      }
+    })()
+
+    analysisTasksRef.current[videoId] = analysisTask
+    return analysisTask
+  }
 
   function handleVideoChange(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith('video/'))
@@ -78,20 +304,20 @@ export function VideoEditorPage() {
     files.forEach((file, index) => {
       const src = URL.createObjectURL(file)
       urlsRef.current.push(src)
-      const probe = document.createElement('video')
-      probe.preload = 'metadata'
-      probe.src = src
-      probe.onloadedmetadata = () => {
-        setVideos((currentVideos) => [
-          {
-            id: `${file.name}-${file.lastModified}-${index}`,
-            name: file.name.replace(/\.[^.]+$/, ''),
-            src,
-            duration: probe.duration,
-          },
-          ...currentVideos,
-        ])
+      const nextVideo: VideoAsset = {
+        id: `${file.name}-${file.lastModified}-${index}`,
+        name: file.name.replace(/\.[^.]+$/, ''),
+        src,
+        duration: 0,
+        analysis: {
+          status: 'loading',
+        },
       }
+
+      setAnalysisNotice('')
+      setVideos((currentVideos) => [nextVideo, ...currentVideos])
+      void startVideoAnalysis(nextVideo.id, file, nextVideo)
+      void ensureVideoMetadata(nextVideo.id, src)
     })
 
     event.target.value = ''
@@ -111,22 +337,30 @@ export function VideoEditorPage() {
     ))
   }
 
-  function handleStartEditing() {
+  async function handleStartEditing() {
     if (selectedVideos.length === 0) {
       videoInputRef.current?.click()
       return
     }
 
     setPendingVideos(selectedVideos)
+    setAnalysisNotice('')
     if (aiScanTimerRef.current) {
       window.clearTimeout(aiScanTimerRef.current)
     }
 
-    aiScanTimerRef.current = window.setTimeout(() => {
-      setEditingVideos(selectedVideos)
-      setPendingVideos(null)
-      aiScanTimerRef.current = null
-    }, AI_SCAN_DELAY_MS)
+    await Promise.all([
+      waitForScanOverlay(),
+      Promise.all(selectedVideos.map((video) => startVideoAnalysis(video.id, undefined, video).catch(() => undefined))),
+      Promise.all(selectedVideos.map((video) => ensureVideoMetadata(video.id, video.src))),
+    ])
+
+    const latestVideos = selectedVideoIds
+      .map((selectedId) => videosRef.current.find((video) => video.id === selectedId))
+      .filter((video): video is VideoAsset => Boolean(video))
+
+    setEditingVideos(latestVideos)
+    setPendingVideos(null)
   }
 
   if (editingVideos) {
@@ -147,7 +381,7 @@ export function VideoEditorPage() {
         <button
           className="video-action"
           type="button"
-          onClick={handleStartEditing}
+          onClick={() => void handleStartEditing()}
         >
           {selectedVideos.length > 0 ? '편집' : '불러오기'}
         </button>
@@ -163,8 +397,14 @@ export function VideoEditorPage() {
       />
 
       <button className="video-picker-banner" type="button" onClick={() => videoInputRef.current?.click()}>
-        캐치캐치할 이미지를 선택해 주세요
+        캐치캐치할 영상을 선택해 주세요
       </button>
+
+      {analysisNotice ? (
+        <p className="video-analysis-notice" role="status">
+          {analysisNotice}
+        </p>
+      ) : null}
 
       <div className="video-grid">
         {videos.map((video) => {
@@ -180,6 +420,12 @@ export function VideoEditorPage() {
             >
               <video src={video.src} muted playsInline preload="metadata" />
               {isSelected ? <strong>{selectedIndex + 1}</strong> : null}
+              {video.analysis?.status === 'loading' ? (
+                <i className="video-tile-badge video-tile-badge-loading">분석중</i>
+              ) : null}
+              {video.analysis?.status === 'error' ? (
+                <i className="video-tile-badge video-tile-badge-error">재시도</i>
+              ) : null}
             </button>
           )
         })}
@@ -210,12 +456,10 @@ export function VideoEditorPage() {
 function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => void }) {
   const playerRef = useRef<PlayerRef>(null)
   const musicInputRef = useRef<HTMLInputElement>(null)
-  const timelineScrollRef = useRef<HTMLDivElement>(null)
-  const syncingTimelineRef = useRef(false)
   const projectDuration = assets.reduce((totalDuration, asset) => totalDuration + asset.duration, 0)
-  const [activePanel, setActivePanel] = useState<VideoPanel>('cut')
-  const [trimStart] = useState(0)
-  const [trimEnd] = useState(projectDuration)
+  const [activePanel, setActivePanel] = useState<VideoPanel>('catch')
+  const trimStart = 0
+  const trimEnd = projectDuration
   const [playbackRate] = useState(1)
   const [mutedOriginal] = useState(false)
   const [music, setMusic] = useState<MusicTrack | null>(null)
@@ -223,31 +467,29 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
   const [overlays, setOverlays] = useState<TextOverlay[]>([])
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(trimStart)
+  const [disabledCatchItems, setDisabledCatchItems] = useState<Record<string, boolean>>({})
   const selectedOverlay = overlays.find((overlay) => overlay.id === selectedOverlayId) ?? null
-  const totalRiskRegionCount = mockVideoRiskTargets.length
-  const protectedRegionCount = Math.min(overlays.length, totalRiskRegionCount)
+  const catchItems = useMemo(() => buildVideoCatchItems(assets), [assets])
+  const totalRiskRegionCount = catchItems.length
+  const protectedRegionCount = catchItems.filter((item) => disabledCatchItems[item.id] !== true).length
   const protectionProgress = getProtectionProgress(protectedRegionCount, totalRiskRegionCount)
   const riskLevel = getVideoRiskLevel(protectionProgress)
   const fps = 30
-  const timelineDuration = Math.max(projectDuration, 1)
-  const durationInFrames = Math.max(1, Math.ceil(timelineDuration * fps))
-  const playheadPosition = `${clamp(currentTime / timelineDuration * 100, 0, 100)}%`
-  const clipLeft = `${trimStart / timelineDuration * 100}%`
-  const clipWidth = `${Math.max(2, (trimEnd - trimStart) / timelineDuration * 100)}%`
-
-  useEffect(() => {
-    const timeline = timelineScrollRef.current
-    if (!timeline) return
-
-    const maxScroll = timeline.scrollWidth - timeline.clientWidth
-    if (maxScroll <= 0) return
-
-    syncingTimelineRef.current = true
-    timeline.scrollLeft = clamp(currentTime / timelineDuration, 0, 1) * maxScroll
-    window.setTimeout(() => {
-      syncingTimelineRef.current = false
-    }, 0)
-  }, [currentTime, timelineDuration])
+  const durationInFrames = Math.max(1, Math.ceil(projectDuration * fps))
+  const currentPlaybackState = useMemo(
+    () => getCurrentVideoPlaybackState(assets, currentTime, fps),
+    [assets, currentTime, fps],
+  )
+  const previewCatchRegions = useMemo(
+    () => currentPlaybackState
+      ? getPreviewCatchRegions(currentPlaybackState.asset, currentPlaybackState.frameNumber, disabledCatchItems)
+      : [],
+    [currentPlaybackState, disabledCatchItems],
+  )
+  const currentFrameCatchItemIds = useMemo(
+    () => new Set(previewCatchRegions.map((region) => region.catchItemId)),
+    [previewCatchRegions],
+  )
 
   useEffect(() => {
     const player = playerRef.current
@@ -293,20 +535,6 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
     }
   }
 
-  function handleTimelineScroll() {
-    const timeline = timelineScrollRef.current
-    const player = playerRef.current
-
-    if (!timeline || !player || syncingTimelineRef.current) return
-
-    const maxScroll = timeline.scrollWidth - timeline.clientWidth
-    if (maxScroll <= 0) return
-
-    const nextTime = clamp(timeline.scrollLeft / maxScroll * timelineDuration, trimStart, trimEnd)
-    player.seekTo(Math.round(nextTime * fps))
-    setCurrentTime(nextTime)
-  }
-
   function handleMusicChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
@@ -347,6 +575,20 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
     setOverlays((currentOverlays) => currentOverlays.map((overlay) => (
       overlay.id === selectedOverlayId ? { ...overlay, [key]: value } : overlay
     )))
+  }
+
+  function toggleCatchItem(itemId: string) {
+    setDisabledCatchItems((currentItems) => {
+      const nextItems = { ...currentItems }
+
+      if (nextItems[itemId] === true) {
+        delete nextItems[itemId]
+      } else {
+        nextItems[itemId] = true
+      }
+
+      return nextItems
+    })
   }
 
   function saveProject() {
@@ -410,7 +652,9 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
           </div>
         </div>
         <p className="video-risk-description">
-          {riskLevel.description} · {protectedRegionCount}/{totalRiskRegionCount}개 가림
+          {totalRiskRegionCount > 0
+            ? `${riskLevel.description} · ${protectedRegionCount}/${totalRiskRegionCount}개 가림`
+            : '탐지된 위험 요소가 없어요'}
         </p>
       </div>
 
@@ -430,6 +674,7 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
             style={{ width: '100%', height: '100%' }}
             inputProps={{
               assets,
+              disabledCatchItems,
               mutedOriginal,
               music,
               overlays,
@@ -460,91 +705,16 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
       </div>
 
       <div className="video-bottom-editor">
-        <div className="video-timeline-shell">
-          <aside className="timeline-track-rail" aria-label="트랙 목록">
-            <button type="button" onClick={() => setActivePanel('cut')}><span>＋</span>미디어</button>
-            <button type="button" onClick={() => setActivePanel('music')}><span>♫</span>배경음악</button>
-            <button type="button"><span>⌁</span>텍스트</button>
-            <button type="button"><span>◉</span>음성 녹음</button>
-            <button type="button">
-              <img src={warningIcon} alt="" aria-hidden="true" />
-              캐치
-            </button>
-          </aside>
-          <div className="timeline-scroll-viewport" ref={timelineScrollRef} onScroll={handleTimelineScroll}>
-            <div className="timeline-stage">
-              <div className="timeline-ruler">
-                <span>{formatTime(trimStart)}</span>
-                <i />
-                <span>{formatTime(projectDuration / 2)}</span>
-                <i />
-                <span>{formatTime(projectDuration)}</span>
-              </div>
-              <div className="timeline-playhead" style={{ left: playheadPosition }}>
-                <span>{formatTime(currentTime)}</span>
-              </div>
+        <aside className="timeline-track-rail" aria-label="편집 메뉴">
+          <button type="button" className={activePanel === 'music' ? 'active' : ''} onClick={() => setActivePanel('music')}><span>♫</span>배경음악</button>
+          <button type="button" className={activePanel === 'text' ? 'active' : ''} onClick={() => setActivePanel('text')}><span>⌁</span>텍스트</button>
+          <button type="button" className={activePanel === 'catch' ? 'active' : ''} onClick={() => setActivePanel('catch')}>
+            <img src={warningIcon} alt="" aria-hidden="true" />
+            캐치
+          </button>
+        </aside>
 
-              <div className="timeline-track timeline-video-track">
-                {assets.map((asset, index) => {
-                  const clipStart = assets.slice(0, index).reduce((totalDuration, currentAsset) => totalDuration + currentAsset.duration, 0)
-                  const width = Math.max(3, asset.duration / timelineDuration * 100)
-
-                  return (
-                    <div
-                      key={asset.id}
-                      className="timeline-clip"
-                      style={{
-                        left: `${clipStart / timelineDuration * 100}%`,
-                        width: `${width}%`,
-                      }}
-                    >
-                      <video src={asset.src} muted playsInline preload="metadata" />
-                      <span>{formatTime(asset.duration)}</span>
-                    </div>
-                  )
-                })}
-              </div>
-
-              <div className="timeline-track timeline-audio-row">
-                {music ? (
-                  <div className="timeline-audio-clip" style={{ left: clipLeft, width: clipWidth }}>
-                    <span>{music.name}</span>
-                    <div className="audio-bars" aria-hidden="true">
-                      {Array.from({ length: 30 }, (_, index) => <i key={index} />)}
-                    </div>
-                  </div>
-                ) : (
-                  <button className="timeline-add-row" type="button" onClick={() => setActivePanel('music')}>＋ 오디오 추가</button>
-                )}
-              </div>
-
-              <div className="timeline-track timeline-text-row">
-                {overlays.map((overlay) => (
-                  <button
-                    key={overlay.id}
-                    className={`timeline-text-clip ${overlay.id === selectedOverlayId ? 'active' : ''}`}
-                    style={{
-                      left: `${overlay.start / timelineDuration * 100}%`,
-                      width: `${Math.max(6, (overlay.end - overlay.start) / timelineDuration * 100)}%`,
-                    }}
-                    type="button"
-                    onClick={() => setSelectedOverlayId(overlay.id)}
-                  >
-                    {overlay.text}
-                  </button>
-                ))}
-                {overlays.length === 0 ? (
-                  <button className="timeline-add-row" type="button" onClick={() => setActivePanel('text')}>＋ 텍스트 추가</button>
-                ) : null}
-              </div>
-              <div className="timeline-track timeline-empty-track" />
-              <div className="timeline-track timeline-empty-track" />
-            </div>
-          </div>
-        </div>
-
-        {activePanel !== 'cut' ? (
-          <div className="timeline-inspector">
+        <div className="timeline-inspector">
           {activePanel === 'music' ? (
             <div className="video-music-panel">
               <input ref={musicInputRef} className="sr-only" type="file" accept="audio/*" onChange={handleMusicChange} />
@@ -552,6 +722,7 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
                 <span className="music-name">{music ? music.name : '삽입된 음악 없음'}</span>
                 <button type="button" onClick={() => musicInputRef.current?.click()}>음악 선택</button>
               </div>
+              {music ? <p className="video-panel-description">선택한 음악이 영상 전체에 적용됩니다.</p> : null}
               <label className="video-range">
                 <span>음량</span>
                 <input
@@ -574,6 +745,7 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
                 <input value={textDraft} onChange={(event) => setTextDraft(event.target.value)} aria-label="삽입할 텍스트" />
                 <button type="button" onClick={addTextOverlay}>추가</button>
               </div>
+              <p className="video-panel-description">현재 재생 구간 기준으로 텍스트가 추가됩니다.</p>
               {selectedOverlay ? (
                 <>
                   <div className="text-position-row">
@@ -590,8 +762,41 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
               ) : null}
             </div>
           ) : null}
-          </div>
-        ) : null}
+
+          {activePanel === 'catch' ? (
+            <div className="video-catch-panel">
+              {catchItems.length > 0 ? (
+                <div className="video-catch-list">
+                  {catchItems.map((item) => (
+                    <button
+                      key={item.id}
+                      className={`video-catch-item ${disabledCatchItems[item.id] !== true ? 'active' : 'inactive'} ${currentFrameCatchItemIds.has(item.id) ? 'current' : ''}`}
+                      type="button"
+                      onClick={() => toggleCatchItem(item.id)}
+                      aria-pressed={disabledCatchItems[item.id] !== true}
+                    >
+                      <span className={`video-catch-icon ${disabledCatchItems[item.id] !== true ? 'active' : ''}`}>
+                        <img src={warningIcon} alt="" aria-hidden="true" />
+                      </span>
+                      <div className="video-catch-copy">
+                        <strong>{item.label}</strong>
+                        <span>{item.assetName} · {item.frameHits}프레임</span>
+                      </div>
+                      <span className={`video-catch-state ${disabledCatchItems[item.id] !== true ? 'active' : ''}`}>
+                        {disabledCatchItems[item.id] !== true ? '블러 ON' : '블러 OFF'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="video-placeholder-panel">
+                  <strong>탐지 결과 없음</strong>
+                  <span>영상 분석이 끝나면 여기서 블러 적용을 토글할 수 있어요.</span>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
     </section>
   )

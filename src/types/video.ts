@@ -1,8 +1,18 @@
+import type { VideoAnalyzeResponse } from './api'
+import type { AnalysisStatus } from './editor'
+
+export type VideoAnalysis = {
+  status: AnalysisStatus
+  result?: VideoAnalyzeResponse
+  errorMessage?: string
+}
+
 export type VideoAsset = {
   id: string
   name: string
   src: string
   duration: number
+  analysis?: VideoAnalysis
 }
 
 export type TextOverlay = {

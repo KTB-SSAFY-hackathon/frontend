@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { EditorSlider } from '../components/EditorSlider'
 import warningIcon from '../assets/경고.png'
+import type { MediaDetection } from '../types/api'
 import type { EditorPanel, EditorSettings, GalleryPhoto, MaskMode } from '../types/editor'
 import {
   applyProAdjustments,
@@ -27,11 +28,14 @@ export type ImageEditorSavePayload = {
   status: 'danger' | 'warning' | 'safe'
 }
 
-const mockRiskRegions = [
-  { id: 'risk-face', label: '얼굴', x: 49, y: 25, width: 22, height: 18 },
-  { id: 'risk-name', label: '이름', x: 34, y: 57, width: 28, height: 11 },
-  { id: 'risk-id', label: '식별정보', x: 62, y: 72, width: 26, height: 13 },
-]
+type RiskRegion = {
+  id: string
+  label: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
 
 const maskModes = [
   { key: 'softBlur', label: '소프트 블러', preview: '', tone: 'blur' },
@@ -61,6 +65,22 @@ const riskLevels = [
   { key: 'safe', label: '안전', description: '공유 가능한 수준이에요' },
 ] as const
 
+const detectionLabelMap: Record<string, string> = {
+  school_logo: '학교명패',
+  name_tag: '교복/명찰',
+  address: '주소',
+  gps: '위치정보',
+  recording_date: '촬영일시',
+  device: '기기정보',
+  car_plate: '번호판',
+  card_num: '카드번호',
+  name: '이름',
+  phone: '전화번호',
+  resident_num: '주민번호',
+  face: '얼굴',
+  unknown: '위험 요소',
+}
+
 function getMaskMode(mode: MaskMode) {
   return maskModes.find((maskMode) => maskMode.key === mode) ?? maskModes[0]
 }
@@ -89,6 +109,33 @@ function getRiskLevel(protectionProgress: number) {
   return riskLevels[0]
 }
 
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value))
+}
+
+function getDetectionLabel(label: string) {
+  return detectionLabelMap[label] ?? label
+}
+
+function mapDetectionsToRiskRegions(detections: MediaDetection[]): RiskRegion[] {
+  return detections.map((detection) => {
+    const [left, top, right, bottom] = detection.bboxNorm
+    const x = clampPercent(left * 100)
+    const y = clampPercent(top * 100)
+    const width = clampPercent((right - left) * 100)
+    const height = clampPercent((bottom - top) * 100)
+
+    return {
+      id: detection.detectionId,
+      label: getDetectionLabel(detection.label),
+      x,
+      y,
+      width,
+      height,
+    }
+  })
+}
+
 function getSaveStatus(protectionProgress: number): ImageEditorSavePayload['status'] {
   if (protectionProgress >= 60) return 'safe'
   if (protectionProgress >= 30) return 'warning'
@@ -98,7 +145,7 @@ function getSaveStatus(protectionProgress: number): ImageEditorSavePayload['stat
 function applyMaskToCanvas(
   context: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
-  region: typeof mockRiskRegions[number],
+  region: RiskRegion,
   placement: MaskPlacement,
 ) {
   const x = Math.round(region.x / 100 * canvas.width)
@@ -193,20 +240,30 @@ export function ImageEditor({ photo, onBack, onSave }: ImageEditorProps) {
   const [activePanel, setActivePanel] = useState<EditorPanel>('tools')
   const [showRiskRegions, setShowRiskRegions] = useState(true)
   const [showSaveWarning, setShowSaveWarning] = useState(false)
-  const [selectedRiskId, setSelectedRiskId] = useState(mockRiskRegions[0].id)
+  const [selectedRiskId, setSelectedRiskId] = useState('')
   const [maskPlacementsByRegion, setMaskPlacementsByRegion] = useState<Record<string, MaskPlacement>>({})
   const settings = history[historyIndex]
   const imageFilter = useMemo(() => getCanvasFilter(settings), [settings])
-  const totalRiskRegionCount = mockRiskRegions.length
-  const protectedRegionCount = Object.keys(maskPlacementsByRegion).length
+  const riskRegions = useMemo(
+    () => {
+      if (photo.analysis?.status === 'success') {
+        return mapDetectionsToRiskRegions(photo.analysis.result?.detections ?? [])
+      }
+
+      return []
+    },
+    [photo.analysis],
+  )
+  const totalRiskRegionCount = riskRegions.length
+  const protectedRegionCount = riskRegions.filter((region) => Boolean(maskPlacementsByRegion[region.id])).length
   const protectionProgress = useMemo(
     () => getProtectionProgress(protectedRegionCount, totalRiskRegionCount),
     [protectedRegionCount, totalRiskRegionCount],
   )
   const riskLevel = getRiskLevel(protectionProgress)
   const cropAspect = getAspectValue(settings.aspectRatio)
-  const selectedRiskRegion = mockRiskRegions.find((region) => region.id === selectedRiskId) ?? mockRiskRegions[0]
-  const selectedPlacement = maskPlacementsByRegion[selectedRiskRegion.id]
+  const selectedRiskRegion = riskRegions.find((region) => region.id === selectedRiskId) ?? riskRegions[0] ?? null
+  const selectedPlacement = selectedRiskRegion ? maskPlacementsByRegion[selectedRiskRegion.id] : undefined
   const selectedOffsetLimit = selectedPlacement ? getStickerOffsetLimit(selectedPlacement.scale) : 0
 
   function commitSettings(nextSettings: EditorSettings) {
@@ -274,7 +331,7 @@ export function ImageEditor({ photo, onBack, onSave }: ImageEditorProps) {
     applyProAdjustments(context, settings, canvas.width, canvas.height)
     context.filter = 'none'
     Object.entries(maskPlacementsByRegion).forEach(([regionId, placement]) => {
-      const region = mockRiskRegions.find((riskRegion) => riskRegion.id === regionId)
+      const region = riskRegions.find((riskRegion) => riskRegion.id === regionId)
       if (region) {
         applyMaskToCanvas(context, canvas, region, placement)
       }
@@ -402,7 +459,9 @@ export function ImageEditor({ photo, onBack, onSave }: ImageEditorProps) {
           </div>
         </div>
         <p className="risk-description">
-          {riskLevel.description} · {protectedRegionCount}/{totalRiskRegionCount}개 가림
+          {totalRiskRegionCount > 0
+            ? `${riskLevel.description} · ${protectedRegionCount}/${totalRiskRegionCount}개 가림`
+            : '탐지된 위험 요소가 없어요'}
         </p>
       </div>
 
@@ -418,7 +477,7 @@ export function ImageEditor({ photo, onBack, onSave }: ImageEditorProps) {
             }}
           />
           <>
-            {showRiskRegions || activePanel === 'mask' ? mockRiskRegions.map((region) => {
+            {showRiskRegions || activePanel === 'mask' ? riskRegions.map((region) => {
                 const placement = maskPlacementsByRegion[region.id]
                 const modeInfo = placement ? getMaskMode(placement.mode) : null
                 const previewSize = placement?.mode === 'softBlur' ? 100 : placement?.scale ?? 100
@@ -551,104 +610,113 @@ export function ImageEditor({ photo, onBack, onSave }: ImageEditorProps) {
 
           {activePanel === 'mask' ? (
             <div className="mask-panel" aria-label="영역 가리기">
-              <div className="mask-panel-title">
-                <span>{selectedRiskRegion.label}</span>
-                <strong>{selectedPlacement ? '가림 적용됨' : '가림 전'}</strong>
-              </div>
-              <div className="sticker-search" aria-hidden="true">
-                <span>⌕</span>
-                <span>스티커 검색</span>
-              </div>
-              <div className="mask-mode-grid">
-                {maskModes.map((mode) => (
-                  <button
-                    key={mode.key}
-                    className={selectedPlacement?.mode === mode.key ? 'active' : ''}
-                    type="button"
-                    onClick={() => {
-                      setShowRiskRegions(true)
-                      setMaskPlacementsByRegion((currentPlacements) => ({
-                        ...currentPlacements,
-                        [selectedRiskRegion.id]: createMaskPlacement(mode.key),
-                      }))
-                    }}
-                  >
-                    <span className={`mask-option-mark ${mode.key}`}>
-                      {mode.preview}
-                    </span>
-                    <span>{mode.label}</span>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMaskPlacementsByRegion((currentPlacements) => {
-                      const nextPlacements = { ...currentPlacements }
-                      delete nextPlacements[selectedRiskRegion.id]
-                      return nextPlacements
-                    })
-                  }}
-                >
-                  <span className="mask-option-mark remove">×</span>
-                  <span>제거</span>
-                </button>
-              </div>
-              {selectedPlacement ? (
-                <div className="mask-transform-controls">
-                  <EditorSlider
-                    label="크기"
-                    value={selectedPlacement.scale}
-                    min={selectedPlacement.mode === 'softBlur' || selectedPlacement.mode === 'aiEraser' ? 100 : 40}
-                    max={100}
-                    onChange={(value) => {
-                      const nextOffsetLimit = getStickerOffsetLimit(value)
-                      setMaskPlacementsByRegion((currentPlacements) => ({
-                        ...currentPlacements,
-                        [selectedRiskRegion.id]: {
-                          ...selectedPlacement,
-                          scale: value,
-                          offsetX: Math.max(-nextOffsetLimit, Math.min(nextOffsetLimit, selectedPlacement.offsetX)),
-                          offsetY: Math.max(-nextOffsetLimit, Math.min(nextOffsetLimit, selectedPlacement.offsetY)),
-                        },
-                      }))
-                    }}
-                  />
-                  {selectedPlacement.mode !== 'softBlur' ? (
-                    <>
+              {selectedRiskRegion ? (
+                <>
+                  <div className="mask-panel-title">
+                    <span>{selectedRiskRegion.label}</span>
+                    <strong>{selectedPlacement ? '가림 적용됨' : '가림 전'}</strong>
+                  </div>
+                  <div className="sticker-search" aria-hidden="true">
+                    <span>⌕</span>
+                    <span>스티커 검색</span>
+                  </div>
+                  <div className="mask-mode-grid">
+                    {maskModes.map((mode) => (
+                      <button
+                        key={mode.key}
+                        className={selectedPlacement?.mode === mode.key ? 'active' : ''}
+                        type="button"
+                        onClick={() => {
+                          setShowRiskRegions(true)
+                          setMaskPlacementsByRegion((currentPlacements) => ({
+                            ...currentPlacements,
+                            [selectedRiskRegion.id]: createMaskPlacement(mode.key),
+                          }))
+                        }}
+                      >
+                        <span className={`mask-option-mark ${mode.key}`}>
+                          {mode.preview}
+                        </span>
+                        <span>{mode.label}</span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMaskPlacementsByRegion((currentPlacements) => {
+                          const nextPlacements = { ...currentPlacements }
+                          delete nextPlacements[selectedRiskRegion.id]
+                          return nextPlacements
+                        })
+                      }}
+                    >
+                      <span className="mask-option-mark remove">×</span>
+                      <span>제거</span>
+                    </button>
+                  </div>
+                  {selectedPlacement ? (
+                    <div className="mask-transform-controls">
                       <EditorSlider
-                        label="좌우"
-                        value={selectedPlacement.offsetX}
-                        min={-selectedOffsetLimit}
-                        max={selectedOffsetLimit}
+                        label="크기"
+                        value={selectedPlacement.scale}
+                        min={selectedPlacement.mode === 'softBlur' || selectedPlacement.mode === 'aiEraser' ? 100 : 40}
+                        max={100}
                         onChange={(value) => {
+                          const nextOffsetLimit = getStickerOffsetLimit(value)
                           setMaskPlacementsByRegion((currentPlacements) => ({
                             ...currentPlacements,
                             [selectedRiskRegion.id]: {
                               ...selectedPlacement,
-                              offsetX: value,
+                              scale: value,
+                              offsetX: Math.max(-nextOffsetLimit, Math.min(nextOffsetLimit, selectedPlacement.offsetX)),
+                              offsetY: Math.max(-nextOffsetLimit, Math.min(nextOffsetLimit, selectedPlacement.offsetY)),
                             },
                           }))
                         }}
                       />
-                      <EditorSlider
-                        label="상하"
-                        value={selectedPlacement.offsetY}
-                        min={-selectedOffsetLimit}
-                        max={selectedOffsetLimit}
-                        onChange={(value) => {
-                          setMaskPlacementsByRegion((currentPlacements) => ({
-                            ...currentPlacements,
-                            [selectedRiskRegion.id]: {
-                              ...selectedPlacement,
-                              offsetY: value,
-                            },
-                          }))
-                        }}
-                      />
-                    </>
+                      {selectedPlacement.mode !== 'softBlur' ? (
+                        <>
+                          <EditorSlider
+                            label="좌우"
+                            value={selectedPlacement.offsetX}
+                            min={-selectedOffsetLimit}
+                            max={selectedOffsetLimit}
+                            onChange={(value) => {
+                              setMaskPlacementsByRegion((currentPlacements) => ({
+                                ...currentPlacements,
+                                [selectedRiskRegion.id]: {
+                                  ...selectedPlacement,
+                                  offsetX: value,
+                                },
+                              }))
+                            }}
+                          />
+                          <EditorSlider
+                            label="상하"
+                            value={selectedPlacement.offsetY}
+                            min={-selectedOffsetLimit}
+                            max={selectedOffsetLimit}
+                            onChange={(value) => {
+                              setMaskPlacementsByRegion((currentPlacements) => ({
+                                ...currentPlacements,
+                                [selectedRiskRegion.id]: {
+                                  ...selectedPlacement,
+                                  offsetY: value,
+                                },
+                              }))
+                            }}
+                          />
+                        </>
+                      ) : null}
+                    </div>
                   ) : null}
+                </>
+              ) : (
+                <div className="mask-panel-title">
+                  <span>탐지 결과 없음</span>
+                  <strong>가릴 좌표가 없어요</strong>
                 </div>
-              ) : null}
+              )}
             </div>
           ) : null}
         </div>

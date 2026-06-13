@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -31,6 +31,11 @@ import dummyVlogImage from '../assets/더미브이로그이
 import dummySchoolImage from '../assets/더미학교앞이미지.png'
 import editor10Image from '../assets/에디터10.png'
 import { homeActions } from '../data/navigation'
+import {
+  fetchAverageRiskScore,
+  fetchDetectedRisksCount,
+  fetchSafeFilesCount,
+} from '../utils/backendApi'
 import { getStoredDashboardRecentItems, type DashboardRecentItem } from '../utils/mediaLibrary'
 import './HomePage.css'
 
@@ -54,7 +59,17 @@ type HomeRecentMediaItem = DashboardRecentItem & {
   emoji?: string
 }
 
-const dashboardSnapshot = {
+type DashboardSnapshot = {
+  totalDetections: number
+  averageRiskScore: number
+  safeSharedPhotos: number
+  unmaskedRatio: number
+  topMissedItems: Array<{ label: string; value: number; color: string }>
+  typeDistribution: Array<{ label: string; value: number; color: string }>
+  sources: readonly ['OBJ', 'OCR', 'SCN']
+}
+
+const fallbackDashboardSnapshot: DashboardSnapshot = {
   totalDetections: 248,
   averageRiskScore: 64,
   safeSharedPhotos: 173,
@@ -71,7 +86,7 @@ const dashboardSnapshot = {
     { label: '학교명패', value: 18, color: '#FF8B1F' },
   ],
   sources: ['OBJ', 'OCR', 'SCN'] as const,
-} as const
+}
 
 const RECENT_MEDIA: HomeRecentMediaItem[] = [
   { id: 'recent-selfie', emoji: '🤳', thumbnail: editor10Image, label: '셀카.jpg', mediaType: 'photo', bg: 'linear-gradient(145deg,#FF9A8B,#FF6A88)', status: 'danger', badge: '얼굴 감지됨', count: 2, createdAt: 0 },
@@ -139,7 +154,40 @@ function DashboardTooltip({ active, payload, label }: { active?: boolean; payloa
 
 export function HomePage() {
   const [filter, setFilter] = useState<'all' | 'photo' | 'video'>('all')
+  const [dashboardSnapshot, setDashboardSnapshot] = useState<DashboardSnapshot>(fallbackDashboardSnapshot)
   const recentMedia: HomeRecentMediaItem[] = [...getStoredDashboardRecentItems(), ...RECENT_MEDIA]
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadDashboardSnapshot() {
+      try {
+        const [detectedRiskCount, averageRiskScore, safeFilesCount] = await Promise.all([
+          fetchDetectedRisksCount(),
+          fetchAverageRiskScore(),
+          fetchSafeFilesCount(),
+        ])
+
+        if (cancelled) return
+
+        setDashboardSnapshot((currentSnapshot) => ({
+          ...currentSnapshot,
+          totalDetections: detectedRiskCount.totalDetectedRiskCount,
+          averageRiskScore: Number(averageRiskScore.averageRiskScore),
+          safeSharedPhotos: safeFilesCount.safeFileCount,
+        }))
+      } catch {
+        if (cancelled) return
+        setDashboardSnapshot(fallbackDashboardSnapshot)
+      }
+    }
+
+    void loadDashboardSnapshot()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const filteredRecentMedia = recentMedia.filter((item) => {
     if (filter === 'photo') return item.mediaType === 'photo'

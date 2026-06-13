@@ -1,7 +1,18 @@
+import type { ImageAnalyzeResponse } from './api'
+
+export type AnalysisStatus = 'idle' | 'loading' | 'success' | 'error'
+
+export type PhotoAnalysis = {
+  status: AnalysisStatus
+  result?: ImageAnalyzeResponse
+  errorMessage?: string
+}
+
 export type GalleryPhoto = {
   id: string
   name: string
   src: string
+  analysis?: PhotoAnalysis
 }
 
 export type EditorSettings = {
