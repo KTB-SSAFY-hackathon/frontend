@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Player } from '@remotion/player'
 import type { PlayerRef } from '@remotion/player'
 import { Link } from 'react-router-dom'
+import warningIcon from '../assets/경고.png'
 import { fixedVideoAssets } from '../data/videoAssets'
 import { VideoComposition } from '../remotion/VideoComposition'
 import type { MusicTrack, TextOverlay, VideoAsset } from '../types/video'
@@ -9,6 +10,8 @@ import { clamp, formatTime } from '../utils/video'
 import './VideoEditorPage.css'
 
 type VideoPanel = 'cut' | 'music' | 'graphic' | 'text' | 'pip' | 'effect'
+
+const AI_SCAN_DELAY_MS = 3000
 
 const defaultOverlay: Omit<TextOverlay, 'id' | 'text'> = {
   start: 0,
@@ -22,12 +25,17 @@ const defaultOverlay: Omit<TextOverlay, 'id' | 'text'> = {
 export function VideoEditorPage() {
   const videoInputRef = useRef<HTMLInputElement>(null)
   const urlsRef = useRef<string[]>([])
+  const aiScanTimerRef = useRef<number | null>(null)
   const [videos, setVideos] = useState<VideoAsset[]>(fixedVideoAssets)
   const [selectedVideoIds, setSelectedVideoIds] = useState<string[]>([])
   const [editingVideos, setEditingVideos] = useState<VideoAsset[] | null>(null)
+  const [pendingVideos, setPendingVideos] = useState<VideoAsset[] | null>(null)
 
   useEffect(() => () => {
     urlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    if (aiScanTimerRef.current) {
+      window.clearTimeout(aiScanTimerRef.current)
+    }
   }, [])
 
   useEffect(() => {
@@ -72,12 +80,32 @@ export function VideoEditorPage() {
     .map((selectedId) => videos.find((video) => video.id === selectedId))
     .filter((video): video is VideoAsset => Boolean(video))
 
+  const pendingPreviewVideo = pendingVideos?.[0] ?? null
+
   function toggleVideoSelection(videoId: string) {
     setSelectedVideoIds((currentIds) => (
       currentIds.includes(videoId)
         ? currentIds.filter((currentId) => currentId !== videoId)
         : [...currentIds, videoId]
     ))
+  }
+
+  function handleStartEditing() {
+    if (selectedVideos.length === 0) {
+      videoInputRef.current?.click()
+      return
+    }
+
+    setPendingVideos(selectedVideos)
+    if (aiScanTimerRef.current) {
+      window.clearTimeout(aiScanTimerRef.current)
+    }
+
+    aiScanTimerRef.current = window.setTimeout(() => {
+      setEditingVideos(selectedVideos)
+      setPendingVideos(null)
+      aiScanTimerRef.current = null
+    }, AI_SCAN_DELAY_MS)
   }
 
   if (editingVideos) {
@@ -88,21 +116,17 @@ export function VideoEditorPage() {
     <section className="video-page">
       <header className="video-picker-header">
         <Link to="/" className="video-close" aria-label="홈으로 이동">
-          <span aria-hidden="true">×</span>
+          <svg data-slot="icon" fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
         </Link>
         <button className="video-title" type="button" onClick={() => videoInputRef.current?.click()}>
-          비디오 <span aria-hidden="true">⌄</span>
+          앨범
         </button>
         <button
           className="video-action"
           type="button"
-          onClick={() => {
-            if (selectedVideos.length > 0) {
-              setEditingVideos(selectedVideos)
-            } else {
-              videoInputRef.current?.click()
-            }
-          }}
+          onClick={handleStartEditing}
         >
           {selectedVideos.length > 0 ? '편집' : '불러오기'}
         </button>
@@ -118,7 +142,7 @@ export function VideoEditorPage() {
       />
 
       <button className="video-picker-banner" type="button" onClick={() => videoInputRef.current?.click()}>
-        컷 편집할 동영상을 선택하세요.
+        캐치캐치할 이미지를 선택해 주세요
       </button>
 
       <div className="video-grid">
@@ -134,12 +158,30 @@ export function VideoEditorPage() {
               onClick={() => toggleVideoSelection(video.id)}
             >
               <video src={video.src} muted playsInline preload="metadata" />
-              <span>{video.name} · {formatTime(video.duration)}</span>
               {isSelected ? <strong>{selectedIndex + 1}</strong> : null}
             </button>
           )
         })}
       </div>
+
+      {pendingPreviewVideo ? (
+        <div className="video-scan-overlay" aria-live="polite" aria-label="AI가 영상을 분석하는 중">
+          <div className="video-scan-preview">
+            <video src={pendingPreviewVideo.src} autoPlay muted loop playsInline />
+            <div className="video-scan-dim" />
+            <div className="video-scan-target">
+              <span className="video-scan-corner top-left" />
+              <span className="video-scan-corner top-right" />
+              <span className="video-scan-corner bottom-right" />
+              <span className="video-scan-corner bottom-left" />
+              <span className="video-scan-dot" />
+            </div>
+            <div className="video-scan-grid" />
+            <div className="video-scan-line" />
+          </div>
+          <p className="video-scan-copy">AI가 영상을 탐색하고 있어요</p>
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -150,12 +192,11 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
   const timelineScrollRef = useRef<HTMLDivElement>(null)
   const syncingTimelineRef = useRef(false)
   const projectDuration = assets.reduce((totalDuration, asset) => totalDuration + asset.duration, 0)
-  const projectName = assets.length > 1 ? `${assets[0].name} 외 ${assets.length - 1}개` : assets[0]?.name ?? 'video-project'
   const [activePanel, setActivePanel] = useState<VideoPanel>('cut')
-  const [trimStart, setTrimStart] = useState(0)
-  const [trimEnd, setTrimEnd] = useState(projectDuration)
-  const [playbackRate, setPlaybackRate] = useState(1)
-  const [mutedOriginal, setMutedOriginal] = useState(false)
+  const [trimStart] = useState(0)
+  const [trimEnd] = useState(projectDuration)
+  const [playbackRate] = useState(1)
+  const [mutedOriginal] = useState(false)
   const [music, setMusic] = useState<MusicTrack | null>(null)
   const [textDraft, setTextDraft] = useState('New Text')
   const [overlays, setOverlays] = useState<TextOverlay[]>([])
@@ -168,13 +209,6 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
   const playheadPosition = `${clamp(currentTime / timelineDuration * 100, 0, 100)}%`
   const clipLeft = `${trimStart / timelineDuration * 100}%`
   const clipWidth = `${Math.max(2, (trimEnd - trimStart) / timelineDuration * 100)}%`
-  const bottomTabs = [
-    { key: 'music', label: '오디오', icon: '♪' },
-    { key: 'graphic', label: '그래픽', icon: '▧' },
-    { key: 'text', label: '글자', icon: 'T' },
-    { key: 'pip', label: 'PIP', icon: '▣' },
-    { key: 'effect', label: '효과', icon: '☆' },
-  ] satisfies Array<{ key: VideoPanel; label: string; icon: string }>
 
   useEffect(() => {
     const timeline = timelineScrollRef.current
@@ -218,17 +252,6 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
       player.removeEventListener('frameupdate', handleFrameUpdate)
     }
   }, [fps, trimEnd, trimStart])
-
-  function handleTrimStart(value: number) {
-    const nextStart = clamp(value, 0, Math.max(0, trimEnd - 0.5))
-    setTrimStart(nextStart)
-    playerRef.current?.seekTo(Math.round(nextStart * fps))
-    setCurrentTime(nextStart)
-  }
-
-  function handleTrimEnd(value: number) {
-    setTrimEnd(clamp(value, trimStart + 0.5, projectDuration))
-  }
 
   function togglePlayback() {
     const player = playerRef.current
@@ -315,18 +338,30 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `${projectName || 'video-project'}-project.json`
+    link.download = 'video-project.json'
     link.click()
     URL.revokeObjectURL(url)
   }
 
   return (
     <section className="video-editor timeline-editor">
-      <header className="video-edit-topbar">
-        <button className="video-icon-button" type="button" onClick={onBack} aria-label="비디오 목록으로 돌아가기">‹</button>
-        <button className="video-help-button" type="button" aria-label="도움말">?</button>
-        <strong>제목 없음 (9:16) <span aria-hidden="true">⚙</span></strong>
-        <button className="video-export-button" type="button" onClick={saveProject}>⇧ 추출하기</button>
+      <header className="video-editor-header">
+        <button className="video-editor-back" type="button" onClick={onBack} aria-label="비디오 목록으로 돌아가기">
+          ←
+        </button>
+        <div className="video-project-title" aria-hidden="true" />
+        <div className="video-editor-actions">
+          <button className="video-editor-secondary" type="button" aria-label="영상 프로젝트 공유">
+            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+          </button>
+          <button className="video-editor-save" type="button" onClick={saveProject} aria-label="편집한 영상 프로젝트 저장">
+            <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <div className="video-preview-stage">
@@ -355,11 +390,23 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
       </div>
 
       <div className="video-transport">
-        <button type="button" onClick={togglePlayback} aria-label="재생 또는 정지">▷</button>
+        <button type="button" onClick={togglePlayback} aria-label="재생 또는 정지">
+          <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+          </svg>
+        </button>
         <button type="button" aria-label="전체 화면">⛶</button>
         <span>{formatTime(currentTime)} / {formatTime(trimEnd)}</span>
-        <button type="button" aria-label="실행 취소">↶</button>
-        <button type="button" aria-label="다시 실행">↷</button>
+        <button type="button" aria-label="실행 취소">
+          <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+        <button type="button" aria-label="다시 실행">
+          <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
       </div>
 
       <div className="video-bottom-editor">
@@ -367,9 +414,12 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
           <aside className="timeline-track-rail" aria-label="트랙 목록">
             <button type="button" onClick={() => setActivePanel('cut')}><span>＋</span>미디어</button>
             <button type="button" onClick={() => setActivePanel('music')}><span>♫</span>배경음악</button>
-            <button type="button"><span>⌁</span>효과음</button>
+            <button type="button"><span>⌁</span>텍스트</button>
             <button type="button"><span>◉</span>음성 녹음</button>
-            <button type="button"><span>AI</span>AI 보이스</button>
+            <button type="button">
+              <img src={warningIcon} alt="" aria-hidden="true" />
+              캐치
+            </button>
           </aside>
           <div className="timeline-scroll-viewport" ref={timelineScrollRef} onScroll={handleTimelineScroll}>
             <div className="timeline-stage">
@@ -399,9 +449,6 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
                       }}
                     >
                       <video src={asset.src} muted playsInline preload="metadata" />
-                      <div className="waveform" aria-hidden="true">
-                        {Array.from({ length: 24 }, (_, barIndex) => <i key={barIndex} />)}
-                      </div>
                       <span>{formatTime(asset.duration)}</span>
                     </div>
                   )
@@ -446,34 +493,8 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
           </div>
         </div>
 
-        <div className="timeline-inspector">
-          {activePanel === 'cut' ? (
-            <div className="video-cut-panel">
-              <button
-                className={`clip-audio-toggle ${mutedOriginal ? 'active' : ''}`}
-                type="button"
-                onClick={() => setMutedOriginal((currentValue) => !currentValue)}
-              >
-                클립 오디오 {mutedOriginal ? '켜기' : '음소거'}
-              </button>
-              <label className="video-range">
-                <span>시작</span>
-                <input type="range" min={0} max={projectDuration} step={0.1} value={trimStart} onChange={(event) => handleTrimStart(Number(event.target.value))} />
-                <output>{formatTime(trimStart)}</output>
-              </label>
-              <label className="video-range">
-                <span>끝</span>
-                <input type="range" min={0} max={projectDuration} step={0.1} value={trimEnd} onChange={(event) => handleTrimEnd(Number(event.target.value))} />
-                <output>{formatTime(trimEnd)}</output>
-              </label>
-              <label className="video-range">
-                <span>속도</span>
-                <input type="range" min={0.5} max={2} step={0.25} value={playbackRate} onChange={(event) => setPlaybackRate(Number(event.target.value))} />
-                <output>{playbackRate}x</output>
-              </label>
-            </div>
-          ) : null}
-
+        {activePanel !== 'cut' ? (
+          <div className="timeline-inspector">
           {activePanel === 'music' ? (
             <div className="video-music-panel">
               <input ref={musicInputRef} className="sr-only" type="file" accept="audio/*" onChange={handleMusicChange} />
@@ -519,28 +540,8 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
               ) : null}
             </div>
           ) : null}
-
-          {activePanel !== 'cut' && activePanel !== 'music' && activePanel !== 'text' ? (
-            <div className="video-placeholder-panel">
-              <strong>{bottomTabs.find((tab) => tab.key === activePanel)?.label}</strong>
-              <span>선택한 트랙에 효과를 추가할 수 있습니다.</span>
-            </div>
-          ) : null}
-        </div>
-
-        <nav className="video-tabs" aria-label="영상 편집 도구">
-          {bottomTabs.map((tab) => (
-            <button
-              key={tab.key}
-              className={activePanel === tab.key ? 'active' : ''}
-              type="button"
-              onClick={() => setActivePanel(tab.key)}
-            >
-              <span>{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+          </div>
+        ) : null}
       </div>
     </section>
   )
