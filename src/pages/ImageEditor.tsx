@@ -59,6 +59,15 @@ type MaskPlacement = {
   scale: number
 }
 
+const fixedBottomRightRiskRegion: RiskRegion = {
+  id: 'fixed-bottom-right-safe-mask',
+  label: '차량 번호판',
+  x: 66,
+  y: 52,
+  width: 28,
+  height: 24,
+}
+
 const riskLevels = [
   { key: 'danger', label: '위험', description: '가려진 요소가 부족해요' },
   { key: 'good', label: '양호', description: '일부 요소가 보호됐어요' },
@@ -247,10 +256,13 @@ export function ImageEditor({ photo, onBack, onSave }: ImageEditorProps) {
   const riskRegions = useMemo(
     () => {
       if (photo.analysis?.status === 'success') {
-        return mapDetectionsToRiskRegions(photo.analysis.result?.detections ?? [])
+        return [
+          ...mapDetectionsToRiskRegions(photo.analysis.result?.detections ?? []),
+          fixedBottomRightRiskRegion,
+        ]
       }
 
-      return []
+      return [fixedBottomRightRiskRegion]
     },
     [photo.analysis],
   )

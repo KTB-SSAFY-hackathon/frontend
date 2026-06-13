@@ -467,12 +467,12 @@
   border-radius: inherit;
   background: linear-gradient(
     90deg,
-    #22c55e 0%,
-    #74d64a 20%,
-    #d8dd1e 42%,
-    #f4c61b 58%,
-    #ff9926 78%,
-    #ff5757 100%
+    #ff5757 0%,
+    #ff9926 22%,
+    #f4c61b 42%,
+    #d8dd1e 58%,
+    #74d64a 78%,
+    #22c55e 100%
   );
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
@@ -623,6 +623,10 @@
   border-radius: 50%;
   background: #fff;
   transform: translate(-50%, -50%);
+  transition:
+    width 180ms ease,
+    height 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .risk-target-corner {
@@ -630,6 +634,26 @@
   width: 14px;
   height: 14px;
   border: 3px solid #fff;
+  transition:
+    width 180ms ease,
+    height 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.risk-region:hover .risk-target-dot,
+.risk-region:focus-visible .risk-target-dot,
+.risk-region.selected .risk-target-dot {
+  width: 9px;
+  height: 9px;
+  box-shadow: 0 0 0 5px rgba(255, 45, 45, 0.22);
+}
+
+.risk-region:hover .risk-target-corner,
+.risk-region:focus-visible .risk-target-corner,
+.risk-region.selected .risk-target-corner {
+  width: 22px;
+  height: 22px;
 }
 
 .risk-target-corner.corner-tl {
@@ -639,11 +663,23 @@
   border-bottom: none;
 }
 
+.risk-region:hover .risk-target-corner.corner-tl,
+.risk-region:focus-visible .risk-target-corner.corner-tl,
+.risk-region.selected .risk-target-corner.corner-tl {
+  transform: translate(-5px, -5px);
+}
+
 .risk-target-corner.corner-tr {
   right: 0;
   top: 0;
   border-left: none;
   border-bottom: none;
+}
+
+.risk-region:hover .risk-target-corner.corner-tr,
+.risk-region:focus-visible .risk-target-corner.corner-tr,
+.risk-region.selected .risk-target-corner.corner-tr {
+  transform: translate(5px, -5px);
 }
 
 .risk-target-corner.corner-br {
@@ -653,11 +689,23 @@
   border-top: none;
 }
 
+.risk-region:hover .risk-target-corner.corner-br,
+.risk-region:focus-visible .risk-target-corner.corner-br,
+.risk-region.selected .risk-target-corner.corner-br {
+  transform: translate(5px, 5px);
+}
+
 .risk-target-corner.corner-bl {
   left: 0;
   bottom: 0;
   border-right: none;
   border-top: none;
+}
+
+.risk-region:hover .risk-target-corner.corner-bl,
+.risk-region:focus-visible .risk-target-corner.corner-bl,
+.risk-region.selected .risk-target-corner.corner-bl {
+  transform: translate(-5px, 5px);
 }
 
 .mask-preview {

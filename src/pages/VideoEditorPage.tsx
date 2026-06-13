@@ -32,6 +32,9 @@ type VideoPreviewCatchRegion = {
 }
 
 const AI_SCAN_DELAY_MS = 3000
+const VIDEO_EDITOR_TIME_UPDATE_INTERVAL = 0.2
+const VIDEO_CATCH_REGION_PADDING_PERCENT = 2.5
+const VIDEO_EDITOR_FPS = 24
 const videoRiskLevels = [
   { key: 'danger', label: '위험', description: '가려진 요소가 부족해요' },
   { key: 'good', label: '양호', description: '일부 요소가 보호됐어요' },
@@ -85,6 +88,20 @@ function getVideoCatchItemId(assetId: string, detection: MediaDetection) {
 
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value))
+}
+
+function expandVideoCatchRegion(left: number, top: number, right: number, bottom: number) {
+  const expandedLeft = clampPercent(left * 100 - VIDEO_CATCH_REGION_PADDING_PERCENT)
+  const expandedTop = clampPercent(top * 100 - VIDEO_CATCH_REGION_PADDING_PERCENT)
+  const expandedRight = clampPercent(right * 100 + VIDEO_CATCH_REGION_PADDING_PERCENT)
+  const expandedBottom = clampPercent(bottom * 100 + VIDEO_CATCH_REGION_PADDING_PERCENT)
+
+  return {
+    left: expandedLeft,
+    top: expandedTop,
+    width: Math.max(0, expandedRight - expandedLeft),
+    height: Math.max(0, expandedBottom - expandedTop),
+  }
 }
 
 function buildVideoCatchItems(assets: VideoAsset[]) {
@@ -153,15 +170,16 @@ function getPreviewCatchRegions(
     .map<VideoPreviewCatchRegion>((detection) => {
       const [left, top, right, bottom] = detection.bboxNorm
       const catchItemId = getVideoCatchItemId(asset.id, detection)
+      const expandedRegion = expandVideoCatchRegion(left, top, right, bottom)
 
       return {
         id: detection.detectionId,
         catchItemId,
         label: getVideoDetectionLabel(detection.label),
-        left: clampPercent(left * 100),
-        top: clampPercent(top * 100),
-        width: clampPercent((right - left) * 100),
-        height: clampPercent((bottom - top) * 100),
+        left: expandedRegion.left,
+        top: expandedRegion.top,
+        width: expandedRegion.width,
+        height: expandedRegion.height,
         active: disabledItemsById[catchItemId] !== true,
       }
     })
@@ -456,11 +474,14 @@ export function VideoEditorPage() {
 function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => void }) {
   const playerRef = useRef<PlayerRef>(null)
   const musicInputRef = useRef<HTMLInputElement>(null)
-  const projectDuration = assets.reduce((totalDuration, asset) => totalDuration + asset.duration, 0)
+  const projectDuration = useMemo(
+    () => assets.reduce((totalDuration, asset) => totalDuration + asset.duration, 0),
+    [assets],
+  )
   const [activePanel, setActivePanel] = useState<VideoPanel>('catch')
   const trimStart = 0
   const trimEnd = projectDuration
-  const [playbackRate] = useState(1)
+  const [playbackRate] = useState(0.3)
   const [mutedOriginal] = useState(false)
   const [music, setMusic] = useState<MusicTrack | null>(null)
   const [textDraft, setTextDraft] = useState('New Text')
@@ -474,7 +495,7 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
   const protectedRegionCount = catchItems.filter((item) => disabledCatchItems[item.id] !== true).length
   const protectionProgress = getProtectionProgress(protectedRegionCount, totalRiskRegionCount)
   const riskLevel = getVideoRiskLevel(protectionProgress)
-  const fps = 30
+  const fps = VIDEO_EDITOR_FPS
   const durationInFrames = Math.max(1, Math.ceil(projectDuration * fps))
   const currentPlaybackState = useMemo(
     () => getCurrentVideoPlaybackState(assets, currentTime, fps),
@@ -489,6 +510,17 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
   const currentFrameCatchItemIds = useMemo(
     () => new Set(previewCatchRegions.map((region) => region.catchItemId)),
     [previewCatchRegions],
+  )
+  const playerInputProps = useMemo(
+    () => ({
+      assets,
+      disabledCatchItems,
+      mutedOriginal,
+      music,
+      overlays,
+      fps,
+    }),
+    [assets, disabledCatchItems, fps, music, mutedOriginal, overlays],
   )
 
   useEffect(() => {
@@ -510,7 +542,11 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
         return
       }
 
-      setCurrentTime(nextTime)
+      setCurrentTime((currentValue) => (
+        Math.abs(nextTime - currentValue) >= VIDEO_EDITOR_TIME_UPDATE_INTERVAL
+          ? nextTime
+          : currentValue
+      ))
     }
 
     player.addEventListener('frameupdate', handleFrameUpdate)
@@ -672,14 +708,7 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
             playbackRate={playbackRate}
             initiallyMuted={mutedOriginal}
             style={{ width: '100%', height: '100%' }}
-            inputProps={{
-              assets,
-              disabledCatchItems,
-              mutedOriginal,
-              music,
-              overlays,
-              fps,
-            }}
+            inputProps={playerInputProps}
           />
         </div>
       </div>

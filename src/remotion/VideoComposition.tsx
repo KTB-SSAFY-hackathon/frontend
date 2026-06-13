@@ -21,6 +21,8 @@ type CompositionCatchRegion = {
   active: boolean
 }
 
+const VIDEO_CATCH_REGION_PADDING_PERCENT = 2.5
+
 const detectionLabelMap: Record<string, string> = {
   school_logo: '학교명패',
   name_tag: '교복/명찰',
@@ -39,6 +41,20 @@ const detectionLabelMap: Record<string, string> = {
 
 function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value))
+}
+
+function expandVideoCatchRegion(left: number, top: number, right: number, bottom: number) {
+  const expandedLeft = clampPercent(left * 100 - VIDEO_CATCH_REGION_PADDING_PERCENT)
+  const expandedTop = clampPercent(top * 100 - VIDEO_CATCH_REGION_PADDING_PERCENT)
+  const expandedRight = clampPercent(right * 100 + VIDEO_CATCH_REGION_PADDING_PERCENT)
+  const expandedBottom = clampPercent(bottom * 100 + VIDEO_CATCH_REGION_PADDING_PERCENT)
+
+  return {
+    left: expandedLeft,
+    top: expandedTop,
+    width: Math.max(0, expandedRight - expandedLeft),
+    height: Math.max(0, expandedBottom - expandedTop),
+  }
 }
 
 function getDetectionLabel(label: string) {
@@ -90,14 +106,15 @@ function getCurrentCatchRegions(
 
   return currentFrame.detections.map<CompositionCatchRegion>((detection) => {
     const [left, top, right, bottom] = detection.bboxNorm
+    const expandedRegion = expandVideoCatchRegion(left, top, right, bottom)
 
     return {
       id: detection.detectionId,
       label: getDetectionLabel(detection.label),
-      left: clampPercent(left * 100),
-      top: clampPercent(top * 100),
-      width: clampPercent((right - left) * 100),
-      height: clampPercent((bottom - top) * 100),
+      left: expandedRegion.left,
+      top: expandedRegion.top,
+      width: expandedRegion.width,
+      height: expandedRegion.height,
       active: disabledCatchItems[getVideoCatchItemId(playbackAsset.asset.id, detection)] !== true,
     }
   })

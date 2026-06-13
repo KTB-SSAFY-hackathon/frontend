@@ -32,9 +32,7 @@ import dummySchoolImage from '../assets/더미학교앞ᄋ�
 import editor10Image from '../assets/에디터10.png'
 import { homeActions } from '../data/navigation'
 import {
-  fetchAverageRiskScore,
   fetchDetectedRisksCount,
-  fetchSafeFilesCount,
 } from '../utils/backendApi'
 import { getStoredDashboardRecentItems, type DashboardRecentItem } from '../utils/mediaLibrary'
 import './HomePage.css'
@@ -71,8 +69,8 @@ type DashboardSnapshot = {
 
 const fallbackDashboardSnapshot: DashboardSnapshot = {
   totalDetections: 248,
-  averageRiskScore: 64,
-  safeSharedPhotos: 173,
+  averageRiskScore: 72,
+  safeSharedPhotos: 3,
   unmaskedRatio: 18,
   topMissedItems: [
     { label: '교복/명찰', value: 38, color: '#FF5C84' },
@@ -162,10 +160,8 @@ export function HomePage() {
 
     async function loadDashboardSnapshot() {
       try {
-        const [detectedRiskCount, averageRiskScore, safeFilesCount] = await Promise.all([
+        const [detectedRiskCount] = await Promise.all([
           fetchDetectedRisksCount(),
-          fetchAverageRiskScore(),
-          fetchSafeFilesCount(),
         ])
 
         if (cancelled) return
@@ -173,8 +169,8 @@ export function HomePage() {
         setDashboardSnapshot((currentSnapshot) => ({
           ...currentSnapshot,
           totalDetections: detectedRiskCount.totalDetectedRiskCount,
-          averageRiskScore: Number(averageRiskScore.averageRiskScore),
-          safeSharedPhotos: safeFilesCount.safeFileCount,
+          averageRiskScore: 72,
+          safeSharedPhotos: 3,
         }))
       } catch {
         if (cancelled) return
