@@ -72,6 +72,39 @@
   padding: 0 20px;
 }
 
+.home-recent-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.home-recent-heading {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: left;
+  color: #111827;
+  font-family: 'Plus Jakarta Sans', 'Nunito', sans-serif;
+}
+
+.home-recent-title-marker {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex: 0 0 34px;
+  display: block;
+}
+
+.home-recent-title-text {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
 .home-dashboard {
   display: flex;
   flex-direction: column;
@@ -82,6 +115,20 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.home-dashboard-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-dashboard-title-icon {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  object-fit: contain;
+  display: block;
 }
 
 .dashboard-chip {
@@ -237,9 +284,21 @@
 .dashboard-card-header,
 .home-recent-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.home-recent-header {
+  justify-content: center;
+  gap: 50px;
+}
+
+.home-recent-filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 .dashboard-card-header h4 {
@@ -433,8 +492,7 @@
     height: 138px;
   }
 
-  .dashboard-card-header,
-  .home-recent-header {
+  .dashboard-card-header {
     flex-direction: column;
   }
 

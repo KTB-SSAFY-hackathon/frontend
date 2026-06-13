@@ -10,6 +10,7 @@ import { SplashScreen } from './components/SplashScreen'
 import { useState } from 'react'
 import { LoginPage } from './pages/LoginPage'
 import catchcatchLogo from './assets/캐치캐치로고.png'
+import markerImage from './assets/마커.png'
 
 function AppScreen() {
   const location = useLocation()
@@ -42,11 +43,11 @@ function AppScreen() {
             {isHome ? (
               <div className="home-header-layout">
                 <div className="home-header-copy">
-                  <p className="home-header-subtitle">올리기 전에 한 번 더 안전하게</p>
                   <div className="home-header-brand-row">
                     <img className="home-header-logo" src={catchcatchLogo} alt="캐치캐치" />
                   </div>
                 </div>
+                <img className="home-header-marker" src={markerImage} alt="" aria-hidden="true" />
               </div>
             ) : (
               <div>

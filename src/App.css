@@ -57,15 +57,6 @@
   text-align: left;
 }
 
-.home-header-subtitle {
-  padding: 10px 8px 0;
-  color: #6b7280;
-  font-size: 0.84rem;
-  font-weight: 700;
-  line-height: 1.35;
-  letter-spacing: -0.02em;
-}
-
 .home-header-brand-row {
   display: flex;
   align-items: center;
@@ -78,6 +69,15 @@
   height: 40px;
   max-width: 188px;
   object-fit: contain;
+}
+
+.home-header-marker {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  object-fit: contain;
+  align-self: center;
+  transform: translateY(-4px);
 }
 
 .home-header-badge {
@@ -277,13 +277,16 @@
     padding: 12px 14px 10px;
   }
 
-  .home-header-subtitle {
-    font-size: 0.82rem;
-  }
-
   .home-header-logo {
     height: 38px;
     max-width: 176px;
+  }
+
+  .home-header-marker {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    transform: translateY(-3px);
   }
 
   .home-header-badge {

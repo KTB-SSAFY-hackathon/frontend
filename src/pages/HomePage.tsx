@@ -24,6 +24,8 @@ import {
   YAxis,
 } from 'recharts'
 import { Link } from 'react-router-dom'
+import markerImage from '../assets/마커.png'
+import warningIcon from '../assets/경고.png'
 import { homeActions } from '../data/navigation'
 import './HomePage.css'
 
@@ -150,11 +152,14 @@ export function HomePage() {
 
       <section className="home-recent-section">
         <div className="home-recent-header">
-          <div>
-            <SectionTitle sub="오늘 4개 분석 완료">오늘 검사한 콘텐츠</SectionTitle>
-          </div>
+          <h3 className="home-recent-heading">
+            <span className="home-recent-title">
+              <img className="home-recent-title-marker" src={markerImage} alt="" aria-hidden="true" />
+              <span className="home-recent-title-text">오늘 캐치한 콘텐츠</span>
+            </span>
+          </h3>
 
-          <div style={{ display: 'flex', gap: 5, marginTop: -14 }}>
+          <div className="home-recent-filters">
             {(['all', 'photo', 'video'] as const).map((value) => (
               <button
                 key={value}
@@ -278,7 +283,10 @@ export function HomePage() {
         <div className="home-dashboard-header">
           <span className="dashboard-chip">개인정보 대시보드</span>
           <SectionTitle sub="업로드 기록 기준으로 누적 탐지와 처리 상태를 정리했어요.">
-            <span id="home-dashboard-title">개인정보 보호 현황</span>
+            <span id="home-dashboard-title" className="home-dashboard-title">
+              <img className="home-dashboard-title-icon" src={warningIcon} alt="" aria-hidden="true" />
+              <span>개인정보 캐치 현환</span>
+            </span>
           </SectionTitle>
         </div>
 
