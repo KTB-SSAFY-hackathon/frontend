@@ -26,6 +26,12 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
 }
 
+.home-screen {
+  background:
+    radial-gradient(circle at 88% 18%, rgba(39, 221, 161, 0.34) 0 13%, transparent 28%),
+    linear-gradient(180deg, #d7fff3 0%, #cdfbf1 43%, #a6efd5 100%);
+}
+
 .app-header,
 .app-footer {
   text-align: center;
@@ -43,6 +49,7 @@
 .home-header {
   padding: 14px 14px 0;
   border-bottom: 0;
+  background: #ffffff;
 }
 
 .home-header-layout {
@@ -140,7 +147,7 @@
   align-items: stretch;
   justify-content: stretch;
   padding: 0;
-  background: #f8fafc;
+  background: transparent;
 }
 
 .immersive-screen .app-main {

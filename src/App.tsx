@@ -35,7 +35,7 @@ function AppScreen() {
 
   return (
     <div className="app-shell">
-      <div className={`app-screen ${isImmersiveEditor ? 'immersive-screen' : ''}`}>
+      <div className={`app-screen ${isImmersiveEditor ? 'immersive-screen' : ''} ${isHome ? 'home-screen' : ''}`}>
         {showSplash ? <SplashScreen onComplete={handleSplashComplete} /> : null}
 
         {isImmersiveEditor ? null : (

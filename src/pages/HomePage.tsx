@@ -30,6 +30,7 @@ import dummyParkingImage from '../assets/더미주차장이
 import dummyVlogImage from '../assets/더미브이로그이미지.webp'
 import dummySchoolImage from '../assets/더미학교앞이미지.png'
 import editor10Image from '../assets/에디터10.png'
+import floatingImage from '../assets/둥둥.png'
 import { homeActions } from '../data/navigation'
 import {
   fetchDetectedRisksCount,
@@ -195,6 +196,13 @@ export function HomePage() {
 
   return (
     <section className="home-page">
+      <div className="home-floating-background" aria-hidden="true">
+        <img className="home-floating-item home-floating-item-top" src={floatingImage} alt="" />
+        <img className="home-floating-item home-floating-item-left" src={floatingImage} alt="" />
+        <img className="home-floating-item home-floating-item-right" src={floatingImage} alt="" />
+        <img className="home-floating-item home-floating-item-bottom" src={floatingImage} alt="" />
+      </div>
+
       <div className="home-actions" aria-label="주요 편집 메뉴">
         {homeActions.map((action) => (
           <Link key={action.path} to={action.path} className="home-action-card">
