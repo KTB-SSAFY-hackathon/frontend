@@ -10,6 +10,7 @@
 }
 
 .app-screen {
+  position: relative;
   flex: 0 0 390px;
   width: 390px;
   min-width: 390px;

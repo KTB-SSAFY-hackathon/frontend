@@ -1,22 +1,43 @@
 import './App.css'
-import { HashRouter, NavLink, Route, Routes, useLocation } from 'react-router-dom'
+import { HashRouter, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { tabs } from './data/navigation'
 import { HomePage } from './pages/HomePage'
 import { CameraPage } from './pages/CameraPage'
 import { PageContent } from './pages/PageContent'
 import { PhotoEditorPage } from './pages/PhotoEditorPage'
 import { VideoEditorPage } from './pages/VideoEditorPage'
+import { SplashScreen } from './components/SplashScreen'
+import { useState } from 'react'
+import { LoginPage } from './pages/LoginPage'
 import catchcatchLogo from './assets/캐치캐치로고.png'
 
 function AppScreen() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const [showSplash, setShowSplash] = useState(true)
   const currentTab = tabs.find((tab) => tab.path === location.pathname) ?? tabs[0]
+  const isImmersiveEditor =
+    location.pathname === '/photo-editor' ||
+    location.pathname === '/video-editor' ||
+    location.pathname === '/camera' ||
+    location.pathname === '/login'
+
+  const handleSplashComplete = () => {
+    setShowSplash(false)
+    navigate('/login')
+  }
+
+  const handleLogin = () => {
+    navigate('/')
+  }
   const isHome = location.pathname === '/'
   const isImmersiveEditor = location.pathname === '/photo-editor' || location.pathname === '/video-editor' || location.pathname === '/camera'
 
   return (
     <div className="app-shell">
       <div className={`app-screen ${isImmersiveEditor ? 'immersive-screen' : ''}`}>
+        {showSplash ? <SplashScreen onComplete={handleSplashComplete} /> : null}
+
         {isImmersiveEditor ? null : (
           <header className={`app-header ${isHome ? 'home-header' : ''}`}>
             {isHome ? (
@@ -40,6 +61,7 @@ function AppScreen() {
         <main className={`app-main ${isHome ? 'home-main' : ''}`}>
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
             <Route path="/photo-editor" element={<PhotoEditorPage />} />
             <Route path="/video-editor" element={<VideoEditorPage />} />
             <Route
