@@ -5,14 +5,21 @@ import type { GalleryPhoto } from '../types/editor'
 import { ImageEditor } from './ImageEditor'
 import './PhotoEditorPage.css'
 
+const AI_SCAN_DELAY_MS = 3000
+
 export function PhotoEditorPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const photoUrlsRef = useRef<string[]>([])
+  const aiScanTimerRef = useRef<number | null>(null)
   const [photos, setPhotos] = useState<GalleryPhoto[]>(fixedGalleryPhotos)
   const [selectedPhoto, setSelectedPhoto] = useState<GalleryPhoto | null>(null)
+  const [pendingPhoto, setPendingPhoto] = useState<GalleryPhoto | null>(null)
 
   useEffect(() => () => {
     photoUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
+    if (aiScanTimerRef.current) {
+      window.clearTimeout(aiScanTimerRef.current)
+    }
   }, [])
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -33,6 +40,19 @@ export function PhotoEditorPage() {
     }
 
     event.target.value = ''
+  }
+
+  function handlePhotoSelect(photo: GalleryPhoto) {
+    setPendingPhoto(photo)
+    if (aiScanTimerRef.current) {
+      window.clearTimeout(aiScanTimerRef.current)
+    }
+
+    aiScanTimerRef.current = window.setTimeout(() => {
+      setSelectedPhoto(photo)
+      setPendingPhoto(null)
+      aiScanTimerRef.current = null
+    }, AI_SCAN_DELAY_MS)
   }
 
   if (selectedPhoto) {
@@ -81,12 +101,31 @@ export function PhotoEditorPage() {
       ) : (
         <div className="gallery-grid">
           {photos.map((photo) => (
-            <button key={photo.id} className="gallery-tile" type="button" onClick={() => setSelectedPhoto(photo)}>
+            <button key={photo.id} className="gallery-tile" type="button" onClick={() => handlePhotoSelect(photo)}>
               <img src={photo.src} alt={photo.name} />
             </button>
           ))}
         </div>
       )}
+
+      {pendingPhoto ? (
+        <div className="ai-scan-overlay" aria-live="polite" aria-label="AI가 이미지를 분석하는 중">
+          <div className="ai-scan-preview">
+            <img src={pendingPhoto.src} alt={pendingPhoto.name} />
+            <div className="ai-scan-dim" />
+            <div className="ai-scan-target">
+              <span className="ai-scan-corner top-left" />
+              <span className="ai-scan-corner top-right" />
+              <span className="ai-scan-corner bottom-right" />
+              <span className="ai-scan-corner bottom-left" />
+              <span className="ai-scan-dot" />
+            </div>
+            <div className="ai-scan-grid" />
+            <div className="ai-scan-line" />
+          </div>
+          <p className="ai-scan-copy">AI가 이미지를 탐색하고 있어요</p>
+        </div>
+      ) : null}
     </section>
   )
 }

@@ -24,6 +24,7 @@ const mockRiskRegions = [
 
 const maskModes = [
   { key: 'softBlur', label: '소프트 블러', preview: '', tone: 'blur' },
+  { key: 'aiEraser', label: 'AI 지우개', preview: 'AI', tone: 'erase' },
   { key: 'stickerCat', label: '고양이', preview: '😺', tone: 'emoji' },
   { key: 'stickerSmile', label: '스마일', preview: '😬', tone: 'emoji' },
   { key: 'stickerHeart', label: '하트', preview: '💜', tone: 'emoji' },
@@ -58,7 +59,7 @@ function createMaskPlacement(mode: MaskMode): MaskPlacement {
     mode,
     offsetX: 0,
     offsetY: 0,
-    scale: mode === 'softBlur' ? 100 : 70,
+    scale: mode === 'softBlur' || mode === 'aiEraser' ? 100 : 70,
   }
 }
 
@@ -95,7 +96,7 @@ function applyMaskToCanvas(
 
   if (width <= 0 || height <= 0) return
 
-  if (placement.mode === 'softBlur') {
+  if (placement.mode === 'softBlur' || placement.mode === 'aiEraser') {
     const blurCanvas = document.createElement('canvas')
     blurCanvas.width = width
     blurCanvas.height = height
@@ -178,8 +179,7 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
   const [history, setHistory] = useState<EditorSettings[]>([defaultSettings])
   const [historyIndex, setHistoryIndex] = useState(0)
   const [activePanel, setActivePanel] = useState<EditorPanel>('tools')
-  const [showOriginal, setShowOriginal] = useState(false)
-  const [showRiskRegions, setShowRiskRegions] = useState(false)
+  const [showRiskRegions, setShowRiskRegions] = useState(true)
   const [showSaveWarning, setShowSaveWarning] = useState(false)
   const [selectedRiskId, setSelectedRiskId] = useState(mockRiskRegions[0].id)
   const [maskPlacementsByRegion, setMaskPlacementsByRegion] = useState<Record<string, MaskPlacement>>({})
@@ -192,8 +192,6 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
   )
   const riskLevel = getRiskLevel(protectedRegionCount)
   const cropAspect = getAspectValue(settings.aspectRatio)
-  const canUndo = historyIndex > 0
-  const canRedo = historyIndex < history.length - 1
   const selectedRiskRegion = mockRiskRegions.find((region) => region.id === selectedRiskId) ?? mockRiskRegions[0]
   const selectedPlacement = maskPlacementsByRegion[selectedRiskRegion.id]
   const selectedOffsetLimit = selectedPlacement ? getStickerOffsetLimit(selectedPlacement.scale) : 0
@@ -218,18 +216,6 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
       saturation: preset.saturation,
       warmth: preset.warmth,
     })
-  }
-
-  function undoEdit() {
-    if (canUndo) {
-      setHistoryIndex((currentIndex) => currentIndex - 1)
-    }
-  }
-
-  function redoEdit() {
-    if (canRedo) {
-      setHistoryIndex((currentIndex) => currentIndex + 1)
-    }
   }
 
   function createEditedImageCanvas() {
@@ -346,27 +332,16 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
         <button className="editor-back" type="button" onClick={onBack} aria-label="앨범으로 돌아가기">
           ←
         </button>
-        <div className="editor-history" aria-label="편집 히스토리">
-          <button type="button" onClick={undoEdit} disabled={!canUndo}>Undo</button>
-          <button type="button" onClick={redoEdit} disabled={!canRedo}>Redo</button>
-          <button
-            type="button"
-            className={showOriginal ? 'active' : ''}
-            onPointerDown={() => setShowOriginal(true)}
-            onPointerUp={() => setShowOriginal(false)}
-            onPointerLeave={() => setShowOriginal(false)}
-          >
-            원본
-          </button>
-        </div>
         <div className="editor-actions">
           <button className="share-button" type="button" onClick={() => void shareEditedImage()} aria-label="편집한 이미지 공유">
             <svg fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
             </svg>
           </button>
-          <button className="save-button" type="button" onClick={requestSave}>
-            저장
+          <button className="save-button" type="button" onClick={requestSave} aria-label="편집한 이미지 저장">
+            <svg data-slot="icon" fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
           </button>
         </div>
       </header>
@@ -396,15 +371,12 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
             src={photo.src}
             alt={photo.name}
             style={{
-              filter: showOriginal ? 'none' : imageFilter,
-              transform: showOriginal
-                ? 'none'
-                : `scale(${settings.zoom / 100}) rotate(${settings.rotate}deg) scaleX(${settings.flipX ? -1 : 1}) scaleY(${settings.flipY ? -1 : 1})`,
+              filter: imageFilter,
+              transform: `scale(${settings.zoom / 100}) rotate(${settings.rotate}deg) scaleX(${settings.flipX ? -1 : 1}) scaleY(${settings.flipY ? -1 : 1})`,
             }}
           />
-          {!showOriginal ? (
-            <>
-              {showRiskRegions || activePanel === 'mask' ? mockRiskRegions.map((region) => {
+          <>
+            {showRiskRegions || activePanel === 'mask' ? mockRiskRegions.map((region) => {
                 const placement = maskPlacementsByRegion[region.id]
                 const modeInfo = placement ? getMaskMode(placement.mode) : null
                 const previewSize = placement?.mode === 'softBlur' ? 100 : placement?.scale ?? 100
@@ -453,10 +425,9 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
                   </button>
                 )
               }) : null}
-              <span className="vignette-preview" style={{ opacity: settings.vignette / 100 }} />
-              <span className="grain-preview" style={{ opacity: settings.grain / 130 }} />
-            </>
-          ) : null}
+            <span className="vignette-preview" style={{ opacity: settings.vignette / 100 }} />
+            <span className="grain-preview" style={{ opacity: settings.grain / 130 }} />
+          </>
           <button
             className={`risk-toggle-button ${showRiskRegions ? 'active' : ''}`}
             type="button"
@@ -585,7 +556,7 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
                   <EditorSlider
                     label="크기"
                     value={selectedPlacement.scale}
-                    min={selectedPlacement.mode === 'softBlur' ? 100 : 40}
+                    min={selectedPlacement.mode === 'softBlur' || selectedPlacement.mode === 'aiEraser' ? 100 : 40}
                     max={100}
                     onChange={(value) => {
                       const nextOffsetLimit = getStickerOffsetLimit(value)

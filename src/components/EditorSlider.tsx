@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+
 type EditorSliderProps = {
   label: string
   value: number
@@ -7,6 +9,8 @@ type EditorSliderProps = {
 }
 
 export function EditorSlider({ label, value, min, max, onChange }: EditorSliderProps) {
+  const percentage = ((value - min) / (max - min)) * 100
+
   return (
     <label className="editor-slider">
       <span>{label}</span>
@@ -15,6 +19,7 @@ export function EditorSlider({ label, value, min, max, onChange }: EditorSliderP
         min={min}
         max={max}
         value={value}
+        style={{ '--slider-progress': `${percentage}%` } as CSSProperties}
         onChange={(event) => onChange(Number(event.target.value))}
       />
       <output>{value}</output>
