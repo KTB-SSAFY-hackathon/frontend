@@ -31,7 +31,6 @@ function AppScreen() {
     navigate('/')
   }
   const isHome = location.pathname === '/'
-  const isImmersiveEditor = location.pathname === '/photo-editor' || location.pathname === '/video-editor' || location.pathname === '/camera'
 
   return (
     <div className="app-shell">
