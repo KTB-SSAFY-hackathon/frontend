@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@remotion/player": "^4.0.475",
+    "lucide-react": "^1.18.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^6.15.0",
+    "recharts": "^3.8.1",
     "remotion": "^4.0.475"
   },
   "devDependencies": {

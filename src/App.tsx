@@ -6,25 +6,38 @@ import { CameraPage } from './pages/CameraPage'
 import { PageContent } from './pages/PageContent'
 import { PhotoEditorPage } from './pages/PhotoEditorPage'
 import { VideoEditorPage } from './pages/VideoEditorPage'
+import catchcatchLogo from './assets/캐치캐치로고.png'
 
 function AppScreen() {
   const location = useLocation()
   const currentTab = tabs.find((tab) => tab.path === location.pathname) ?? tabs[0]
+  const isHome = location.pathname === '/'
   const isImmersiveEditor = location.pathname === '/photo-editor' || location.pathname === '/video-editor' || location.pathname === '/camera'
 
   return (
     <div className="app-shell">
       <div className={`app-screen ${isImmersiveEditor ? 'immersive-screen' : ''}`}>
         {isImmersiveEditor ? null : (
-          <header className="app-header">
-            <div>
-              <p className="app-subtitle">앱 바닥글 및 헤더</p>
-              <h1>{currentTab.label}</h1>
-            </div>
+          <header className={`app-header ${isHome ? 'home-header' : ''}`}>
+            {isHome ? (
+              <div className="home-header-layout">
+                <div className="home-header-copy">
+                  <p className="home-header-subtitle">올리기 전에 한 번 더 안전하게</p>
+                  <div className="home-header-brand-row">
+                    <img className="home-header-logo" src={catchcatchLogo} alt="캐치캐치" />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="app-subtitle">앱 바닥글 및 헤더</p>
+                <h1>{currentTab.headerLabel ?? currentTab.label}</h1>
+              </div>
+            )}
           </header>
         )}
 
-        <main className="app-main">
+        <main className={`app-main ${isHome ? 'home-main' : ''}`}>
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/photo-editor" element={<PhotoEditorPage />} />
@@ -55,10 +68,13 @@ function AppScreen() {
                 <NavLink
                   key={tab.key}
                   to={tab.path}
+                  aria-label={tab.footerLabel ?? tab.label}
                   className={({ isActive }) => `tab-item tab-${tab.key} ${isActive ? 'active' : ''}`}
                 >
                   <span className="tab-icon">{tab.icon}</span>
-                  <span className="tab-label">{tab.label}</span>
+                  {tab.showFooterLabel === false ? null : (
+                    <span className="tab-label">{tab.footerLabel ?? tab.label}</span>
+                  )}
                 </NavLink>
               ))}
             </nav>
