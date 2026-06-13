@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { blobToDataUrl, createStoredGalleryPhoto, prependStoredAlbumPhoto } from '../utils/mediaLibrary'
 import './CameraPage.css'
 
 type CameraMode = 'photo' | 'video'
 
 export function CameraPage() {
+  const navigate = useNavigate()
   const previewRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -72,6 +75,26 @@ export function CameraPage() {
     setCaptureType(nextType)
   }
 
+  function createCapturedPhotoName() {
+    const capturedAt = new Date()
+    const month = `${capturedAt.getMonth() + 1}`.padStart(2, '0')
+    const day = `${capturedAt.getDate()}`.padStart(2, '0')
+    const hour = `${capturedAt.getHours()}`.padStart(2, '0')
+    const minute = `${capturedAt.getMinutes()}`.padStart(2, '0')
+    return `촬영 사진 ${month}${day}-${hour}${minute}`
+  }
+
+  async function movePhotoToAlbum(blob: Blob) {
+    try {
+      const photoSrc = await blobToDataUrl(blob)
+      const capturedPhoto = createStoredGalleryPhoto(createCapturedPhotoName(), photoSrc)
+      prependStoredAlbumPhoto(capturedPhoto)
+      navigate('/photo-editor')
+    } catch {
+      replaceCaptureUrl(URL.createObjectURL(blob), 'photo')
+    }
+  }
+
   function capturePhoto() {
     const video = previewRef.current
     if (!video || video.videoWidth === 0 || video.videoHeight === 0) return
@@ -86,7 +109,7 @@ export function CameraPage() {
     context.drawImage(video, 0, 0, canvas.width, canvas.height)
     canvas.toBlob((blob) => {
       if (!blob) return
-      replaceCaptureUrl(URL.createObjectURL(blob), 'photo')
+      void movePhotoToAlbum(blob)
     }, 'image/png')
   }
 

@@ -108,7 +108,7 @@
 .home-dashboard {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .home-dashboard-header {
@@ -120,12 +120,13 @@
 .home-dashboard-title {
   display: inline-flex;
   align-items: center;
+  padding-left: 5px;
   gap: 8px;
 }
 
 .home-dashboard-title-icon {
-  width: 26px;
-  height: 26px;
+  width: 29px;
+  height: 29px;
   flex: 0 0 26px;
   object-fit: contain;
   display: block;

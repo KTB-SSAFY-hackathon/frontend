@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { fixedGalleryPhotos } from '../data/photoAssets'
 import type { GalleryPhoto } from '../types/editor'
-import { ImageEditor } from './ImageEditor'
+import {
+  createDashboardRecentItem,
+  getStoredAlbumPhotos,
+  prependStoredDashboardRecentItem,
+} from '../utils/mediaLibrary'
+import { ImageEditor, type ImageEditorSavePayload } from './ImageEditor'
 import './PhotoEditorPage.css'
 
 const AI_SCAN_DELAY_MS = 3000
 
 export function PhotoEditorPage() {
+  const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const photoUrlsRef = useRef<string[]>([])
   const aiScanTimerRef = useRef<number | null>(null)
-  const [photos, setPhotos] = useState<GalleryPhoto[]>(fixedGalleryPhotos)
+  const [photos, setPhotos] = useState<GalleryPhoto[]>(() => [...getStoredAlbumPhotos(), ...fixedGalleryPhotos])
   const [selectedPhoto, setSelectedPhoto] = useState<GalleryPhoto | null>(null)
   const [pendingPhoto, setPendingPhoto] = useState<GalleryPhoto | null>(null)
 
@@ -55,11 +61,30 @@ export function PhotoEditorPage() {
     }, AI_SCAN_DELAY_MS)
   }
 
+  function handleEditorSave({ imageUrl, fileName, status, uncoveredCount }: ImageEditorSavePayload) {
+    const badge = status === 'safe'
+      ? '안전 처리됨'
+      : status === 'warning'
+        ? '일부 미가림'
+        : '가림 필요'
+
+    prependStoredDashboardRecentItem(createDashboardRecentItem({
+      label: fileName,
+      thumbnail: imageUrl,
+      mediaType: 'photo',
+      status,
+      badge,
+      count: uncoveredCount,
+    }))
+    navigate('/')
+  }
+
   if (selectedPhoto) {
     return (
       <ImageEditor
         photo={selectedPhoto}
         onBack={() => setSelectedPhoto(null)}
+        onSave={handleEditorSave}
       />
     )
   }

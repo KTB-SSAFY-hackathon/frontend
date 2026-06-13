@@ -14,6 +14,17 @@ import {
 type ImageEditorProps = {
   photo: GalleryPhoto
   onBack: () => void
+  onSave: (payload: ImageEditorSavePayload) => void | Promise<void>
+}
+
+export type ImageEditorSavePayload = {
+  imageUrl: string
+  fileName: string
+  protectionProgress: number
+  totalRiskRegionCount: number
+  protectedRegionCount: number
+  uncoveredCount: number
+  status: 'danger' | 'warning' | 'safe'
 }
 
 const mockRiskRegions = [
@@ -76,6 +87,12 @@ function getRiskLevel(protectionProgress: number) {
   if (protectionProgress >= 60) return riskLevels[2]
   if (protectionProgress >= 30) return riskLevels[1]
   return riskLevels[0]
+}
+
+function getSaveStatus(protectionProgress: number): ImageEditorSavePayload['status'] {
+  if (protectionProgress >= 60) return 'safe'
+  if (protectionProgress >= 30) return 'warning'
+  return 'danger'
 }
 
 function applyMaskToCanvas(
@@ -169,7 +186,7 @@ function getEditedImageFileName(photoName: string) {
   return `${photoName || 'edited-photo'}-edited.png`
 }
 
-export function ImageEditor({ photo, onBack }: ImageEditorProps) {
+export function ImageEditor({ photo, onBack, onSave }: ImageEditorProps) {
   const imageRef = useRef<HTMLImageElement>(null)
   const [history, setHistory] = useState<EditorSettings[]>([defaultSettings])
   const [historyIndex, setHistoryIndex] = useState(0)
@@ -280,16 +297,38 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
     return new File([blob], getEditedImageFileName(photo.name), { type: 'image/png' })
   }
 
-  async function saveEditedImage() {
+  function createEditedImageDataUrl() {
     const canvas = createEditedImageCanvas()
 
-    if (!canvas) return
+    if (!canvas) return null
 
-    const imageUrl = canvas.toDataURL('image/png')
+    return canvas.toDataURL('image/png')
+  }
+
+  function downloadEditedImage() {
+    const imageUrl = createEditedImageDataUrl()
+    if (!imageUrl) return
+
     const link = document.createElement('a')
     link.href = imageUrl
     link.download = getEditedImageFileName(photo.name)
     link.click()
+  }
+
+  async function persistEditedImage() {
+    const imageUrl = createEditedImageDataUrl()
+    if (!imageUrl) return
+
+    const uncoveredCount = Math.max(0, totalRiskRegionCount - protectedRegionCount)
+    await onSave({
+      imageUrl,
+      fileName: getEditedImageFileName(photo.name),
+      protectionProgress,
+      totalRiskRegionCount,
+      protectedRegionCount,
+      uncoveredCount,
+      status: getSaveStatus(protectionProgress),
+    })
   }
 
   async function shareEditedImage() {
@@ -305,7 +344,7 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
       return
     }
 
-    await saveEditedImage()
+    downloadEditedImage()
   }
 
   function requestSave() {
@@ -314,12 +353,12 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
       return
     }
 
-    void saveEditedImage()
+    void persistEditedImage()
   }
 
   function confirmRiskSave() {
     setShowSaveWarning(false)
-    void saveEditedImage()
+    void persistEditedImage()
   }
 
   return (

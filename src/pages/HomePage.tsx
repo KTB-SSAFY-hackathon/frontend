@@ -26,7 +26,12 @@ import {
 import { Link } from 'react-router-dom'
 import markerImage from '../assets/마커.png'
 import warningIcon from '../assets/경고.png'
+import dummyParkingImage from '../assets/더미주차장이미지.jpg'
+import dummyVlogImage from '../assets/더미브이로그이미지.webp'
+import dummySchoolImage from '../assets/더미학교앞이미지.png'
+import editor10Image from '../assets/에디터10.png'
 import { homeActions } from '../data/navigation'
+import { getStoredDashboardRecentItems, type DashboardRecentItem } from '../utils/mediaLibrary'
 import './HomePage.css'
 
 const C = {
@@ -44,6 +49,10 @@ const C = {
 } as const
 
 type StatusKey = 'danger' | 'warning' | 'safe'
+type HomeRecentMediaItem = DashboardRecentItem & {
+  bg?: string
+  emoji?: string
+}
 
 const dashboardSnapshot = {
   totalDetections: 248,
@@ -64,12 +73,12 @@ const dashboardSnapshot = {
   sources: ['OBJ', 'OCR', 'SCN'] as const,
 } as const
 
-const RECENT_MEDIA = [
-  { id: 1, emoji: '🤳', label: '셀카.jpg', bg: 'linear-gradient(145deg,#FF9A8B,#FF6A88)', status: 'danger', badge: '얼굴 감지됨', count: 2 },
-  { id: 2, emoji: '🏫', label: '학교앞.jpg', bg: 'linear-gradient(145deg,#43E97B,#38F9D7)', status: 'safe', badge: '안전 처리됨', count: 0 },
-  { id: 3, emoji: '🚘', label: '주차장.mp4', bg: 'linear-gradient(145deg,#A18CD1,#FBC2EB)', status: 'warning', badge: '번호판 감지', count: 1 },
-  { id: 4, emoji: '📍', label: '일상vlog.mp4', bg: 'linear-gradient(145deg,#F093FB,#F5576C)', status: 'danger', badge: '위치정보 노출', count: 3 },
-] as const
+const RECENT_MEDIA: HomeRecentMediaItem[] = [
+  { id: 'recent-selfie', emoji: '🤳', thumbnail: editor10Image, label: '셀카.jpg', mediaType: 'photo', bg: 'linear-gradient(145deg,#FF9A8B,#FF6A88)', status: 'danger', badge: '얼굴 감지됨', count: 2, createdAt: 0 },
+  { id: 'recent-school', emoji: '🏫', thumbnail: dummySchoolImage, label: '학교앞.jpg', mediaType: 'photo', bg: 'linear-gradient(145deg,#43E97B,#38F9D7)', status: 'safe', badge: '안전 처리됨', count: 0, createdAt: 0 },
+  { id: 'recent-parking', emoji: '🚘', thumbnail: dummyParkingImage, label: '주차장.mp4', mediaType: 'video', bg: 'linear-gradient(145deg,#A18CD1,#FBC2EB)', status: 'warning', badge: '번호판 감지', count: 1, createdAt: 0 },
+  { id: 'recent-vlog', emoji: '📍', thumbnail: dummyVlogImage, label: '일상vlog.mp4', mediaType: 'video', bg: 'linear-gradient(145deg,#F093FB,#F5576C)', status: 'danger', badge: '위치정보 노출', count: 3, createdAt: 0 },
+]
 
 function Badge({ status, label }: { status: StatusKey; label: string }) {
   const cfg: Record<StatusKey, { bg: string; color: string }> = {
@@ -97,9 +106,9 @@ function Badge({ status, label }: { status: StatusKey; label: string }) {
   )
 }
 
-function SectionTitle({ children, sub }: { children: ReactNode; sub?: string }) {
+function SectionTitle({ children, sub, marginBottom = 14 }: { children: ReactNode; sub?: string; marginBottom?: number }) {
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div style={{ marginBottom }}>
       <h3
         style={{
           margin: 0,
@@ -130,10 +139,11 @@ function DashboardTooltip({ active, payload, label }: { active?: boolean; payloa
 
 export function HomePage() {
   const [filter, setFilter] = useState<'all' | 'photo' | 'video'>('all')
+  const recentMedia: HomeRecentMediaItem[] = [...getStoredDashboardRecentItems(), ...RECENT_MEDIA]
 
-  const filteredRecentMedia = RECENT_MEDIA.filter((item) => {
-    if (filter === 'photo') return item.label.endsWith('.jpg')
-    if (filter === 'video') return item.label.endsWith('.mp4')
+  const filteredRecentMedia = recentMedia.filter((item) => {
+    if (filter === 'photo') return item.mediaType === 'photo'
+    if (filter === 'video') return item.mediaType === 'video'
     return true
   })
 
@@ -208,9 +218,18 @@ export function HomePage() {
                   position: 'relative',
                 }}
               >
-                <span role="img" aria-label="">
-                  {item.emoji}
-                </span>
+                {item.thumbnail ? (
+                  <img
+                    src={item.thumbnail}
+                    alt=""
+                    aria-hidden="true"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <span role="img" aria-label="">
+                    {item.emoji}
+                  </span>
+                )}
 
                 <div
                   style={{
@@ -225,13 +244,13 @@ export function HomePage() {
                     gap: 3,
                   }}
                 >
-                  {item.label.endsWith('.mp4') ? (
+                  {item.mediaType === 'video' ? (
                     <VideoIcon size={10} color={C.white} strokeWidth={2} />
                   ) : (
                     <ImageIcon size={10} color={C.white} strokeWidth={2} />
                   )}
                   <span style={{ fontSize: 9, color: C.white, fontWeight: 700 }}>
-                    {item.label.endsWith('.mp4') ? '영상' : '사진'}
+                    {item.mediaType === 'video' ? '영상' : '사진'}
                   </span>
                 </div>
 
@@ -281,11 +300,10 @@ export function HomePage() {
 
       <section className="home-dashboard" aria-labelledby="home-dashboard-title">
         <div className="home-dashboard-header">
-          <span className="dashboard-chip">개인정보 대시보드</span>
-          <SectionTitle sub="업로드 기록 기준으로 누적 탐지와 처리 상태를 정리했어요.">
+          <SectionTitle marginBottom={0}>
             <span id="home-dashboard-title" className="home-dashboard-title">
               <img className="home-dashboard-title-icon" src={warningIcon} alt="" aria-hidden="true" />
-              <span>개인정보 캐치 현환</span>
+              <span>개인정보 캐치 현황</span>
             </span>
           </SectionTitle>
         </div>
