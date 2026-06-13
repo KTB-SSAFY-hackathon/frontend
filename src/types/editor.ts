@@ -27,6 +27,7 @@ export type EditorPanel = 'tools' | 'filters' | 'adjust' | 'pro' | 'mask'
 
 export type MaskMode =
   | 'softBlur'
+  | 'aiEraser'
   | 'stickerCat'
   | 'stickerSmile'
   | 'stickerHeart'
