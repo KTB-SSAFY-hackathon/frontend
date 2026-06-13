@@ -67,6 +67,7 @@
   background: #fff;
   transform-origin: 50% 50%;
   transform:
+    translateY(var(--stagger-y, 0px))
     rotateY(calc(var(--rot-y) * (var(--offset-x) + ((var(--item-size-x) - 1) / 2))))
     rotateX(calc(var(--rot-x) * (var(--offset-y) - ((var(--item-size-y) - 1) / 2))))
     translateZ(var(--radius));

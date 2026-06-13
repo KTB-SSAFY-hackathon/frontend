@@ -48,11 +48,11 @@ export function PhotoEditorPage() {
     <section className="gallery-page">
       <header className="gallery-header">
         <Link to="/" className="icon-button" aria-label="홈으로 이동">
-          <span aria-hidden="true">×</span>
+          <svg data-slot="icon" fill="none" strokeWidth="1.5" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
         </Link>
-        <button className="album-title" type="button" onClick={() => fileInputRef.current?.click()}>
-          앨범 <span aria-hidden="true">⌄</span>
-        </button>
+        <button className="album-title" type="button" onClick={() => fileInputRef.current?.click()}>앨범</button>
         <button className="text-button" type="button" onClick={() => fileInputRef.current?.click()}>
           불러오기
         </button>
@@ -83,7 +83,6 @@ export function PhotoEditorPage() {
           {photos.map((photo) => (
             <button key={photo.id} className="gallery-tile" type="button" onClick={() => setSelectedPhoto(photo)}>
               <img src={photo.src} alt={photo.name} />
-              <span>{photo.name}</span>
             </button>
           ))}
         </div>

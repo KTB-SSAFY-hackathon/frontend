@@ -10,6 +10,7 @@ const LOGIN_SEGMENTS = 34
 
 const loginTiles = Array.from({ length: LOGIN_SEGMENTS }, (_, column) => -37 + column * 2).flatMap((x, column) => {
   const ys = column % 2 === 0 ? [-8, -6, -4, -2, 0, 2, 4, 6, 8] : [-7, -5, -3, -1, 1, 3, 5, 7, 9]
+  const staggerY = column % 2 === 0 ? -22 : 22
 
   return ys.map((y, row) => {
     const photo = fixedGalleryPhotos[(column * ys.length + row) % fixedGalleryPhotos.length]
@@ -21,6 +22,7 @@ const loginTiles = Array.from({ length: LOGIN_SEGMENTS }, (_, column) => -37 + c
       y,
       sizeX: 2,
       sizeY: 2,
+      staggerY,
     }
   })
 })
@@ -49,6 +51,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                     '--offset-y': tile.y,
                     '--item-size-x': tile.sizeX,
                     '--item-size-y': tile.sizeY,
+                    '--stagger-y': `${tile.staggerY}px`,
                   } as CSSProperties
                 }
               >
