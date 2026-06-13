@@ -45,9 +45,9 @@ type MaskPlacement = {
 }
 
 const riskLevels = [
-  { key: 'danger', label: '위험', description: '노출 위험 높음' },
-  { key: 'good', label: '양호', description: '일부 보호됨' },
-  { key: 'safe', label: '안전', description: '주요 영역 보호됨' },
+  { key: 'danger', label: '위험', description: '가려진 요소가 부족해요' },
+  { key: 'good', label: '양호', description: '일부 요소가 보호됐어요' },
+  { key: 'safe', label: '안전', description: '공유 가능한 수준이에요' },
 ] as const
 
 function getMaskMode(mode: MaskMode) {
@@ -67,20 +67,15 @@ function getStickerOffsetLimit(scale: number) {
   return Math.max(0, Math.round((100 - scale) / 2))
 }
 
-function getRiskLevel(protectedRegionCount: number) {
-  if (protectedRegionCount >= 2) return riskLevels[2]
-  if (protectedRegionCount === 1) return riskLevels[1]
-  return riskLevels[0]
+function getProtectionProgress(protectedRegionCount: number, totalRiskRegionCount: number) {
+  if (totalRiskRegionCount <= 0) return 100
+  return Math.round((protectedRegionCount / totalRiskRegionCount) * 100)
 }
 
-function getImageRisk(settings: EditorSettings) {
-  const blurProtection = settings.blur * 8
-  const vignetteProtection = settings.vignette * 0.28
-  const desaturationProtection = settings.saturation < 70 ? (70 - settings.saturation) * 0.18 : 0
-  const exposureProtection = settings.exposure < -12 ? Math.abs(settings.exposure) * 0.18 : 0
-  const totalProtection = blurProtection + vignetteProtection + desaturationProtection + exposureProtection
-
-  return Math.max(8, Math.round(100 - Math.min(92, totalProtection)))
+function getRiskLevel(protectionProgress: number) {
+  if (protectionProgress >= 60) return riskLevels[2]
+  if (protectionProgress >= 30) return riskLevels[1]
+  return riskLevels[0]
 }
 
 function applyMaskToCanvas(
@@ -185,12 +180,13 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
   const [maskPlacementsByRegion, setMaskPlacementsByRegion] = useState<Record<string, MaskPlacement>>({})
   const settings = history[historyIndex]
   const imageFilter = useMemo(() => getCanvasFilter(settings), [settings])
+  const totalRiskRegionCount = mockRiskRegions.length
   const protectedRegionCount = Object.keys(maskPlacementsByRegion).length
-  const riskScore = useMemo(
-    () => Math.max(4, getImageRisk(settings) - protectedRegionCount * 22),
-    [protectedRegionCount, settings],
+  const protectionProgress = useMemo(
+    () => getProtectionProgress(protectedRegionCount, totalRiskRegionCount),
+    [protectedRegionCount, totalRiskRegionCount],
   )
-  const riskLevel = getRiskLevel(protectedRegionCount)
+  const riskLevel = getRiskLevel(protectionProgress)
   const cropAspect = getAspectValue(settings.aspectRatio)
   const selectedRiskRegion = mockRiskRegions.find((region) => region.id === selectedRiskId) ?? mockRiskRegions[0]
   const selectedPlacement = maskPlacementsByRegion[selectedRiskRegion.id]
@@ -346,22 +342,29 @@ export function ImageEditor({ photo, onBack }: ImageEditorProps) {
         </div>
       </header>
 
-      <div className="editor-risk-meter" aria-label={`이미지 노출 상태 ${riskLevel.label}, 위험도 ${riskScore}%`}>
+      <div className="editor-risk-meter" aria-label={`개인정보 보호 상태 ${riskLevel.label}, ${protectionProgress}% 가림`}>
         <div className="risk-copy">
-          <span>노출 위험도</span>
-          <strong>{riskLevel.label}</strong>
+          <span>개인정보 보호 진행률</span>
+          <strong>{protectionProgress}%</strong>
         </div>
-        <div className={`risk-track segmented ${riskLevel.key}`}>
-          {riskLevels.map((level) => (
-            <span
-              key={level.key}
-              className={`risk-segment ${level.key} ${riskLevel.key === level.key ? 'active' : ''}`}
-            >
-              {level.label}
+        <div className="risk-track" aria-hidden="true">
+          <div className="risk-track-bar">
+            <span className="risk-track-gradient" />
+            <span className="risk-track-marker" style={{ left: `clamp(10px, ${protectionProgress}%, calc(100% - 10px))` }}>
+              <span className="risk-track-marker-line" />
             </span>
-          ))}
+          </div>
+          <div className="risk-track-scale">
+            {riskLevels.map((level) => (
+              <span key={level.key} className={riskLevel.key === level.key ? 'active' : ''}>
+                {level.label}
+              </span>
+            ))}
+          </div>
         </div>
-        <p className="risk-description">{riskLevel.description} · {protectedRegionCount}/{mockRiskRegions.length}개 가림</p>
+        <p className="risk-description">
+          {riskLevel.description} · {protectedRegionCount}/{totalRiskRegionCount}개 가림
+        </p>
       </div>
 
       <div className="editor-stage">

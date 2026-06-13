@@ -12,6 +12,16 @@ import './VideoEditorPage.css'
 type VideoPanel = 'cut' | 'music' | 'graphic' | 'text' | 'pip' | 'effect'
 
 const AI_SCAN_DELAY_MS = 3000
+const mockVideoRiskTargets = [
+  { id: 'video-face', label: '얼굴' },
+  { id: 'video-plate', label: '번호판' },
+  { id: 'video-location', label: '위치정보' },
+] as const
+const videoRiskLevels = [
+  { key: 'danger', label: '위험', description: '가려진 요소가 부족해요' },
+  { key: 'good', label: '양호', description: '일부 요소가 보호됐어요' },
+  { key: 'safe', label: '안전', description: '공유 가능한 수준이에요' },
+] as const
 
 const defaultOverlay: Omit<TextOverlay, 'id' | 'text'> = {
   start: 0,
@@ -20,6 +30,17 @@ const defaultOverlay: Omit<TextOverlay, 'id' | 'text'> = {
   y: 50,
   size: 28,
   color: '#ffffff',
+}
+
+function getProtectionProgress(protectedRegionCount: number, totalRiskRegionCount: number) {
+  if (totalRiskRegionCount <= 0) return 100
+  return Math.round((protectedRegionCount / totalRiskRegionCount) * 100)
+}
+
+function getVideoRiskLevel(protectionProgress: number) {
+  if (protectionProgress >= 60) return videoRiskLevels[2]
+  if (protectionProgress >= 30) return videoRiskLevels[1]
+  return videoRiskLevels[0]
 }
 
 export function VideoEditorPage() {
@@ -203,6 +224,10 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null)
   const [currentTime, setCurrentTime] = useState(trimStart)
   const selectedOverlay = overlays.find((overlay) => overlay.id === selectedOverlayId) ?? null
+  const totalRiskRegionCount = mockVideoRiskTargets.length
+  const protectedRegionCount = Math.min(overlays.length, totalRiskRegionCount)
+  const protectionProgress = getProtectionProgress(protectedRegionCount, totalRiskRegionCount)
+  const riskLevel = getVideoRiskLevel(protectionProgress)
   const fps = 30
   const timelineDuration = Math.max(projectDuration, 1)
   const durationInFrames = Math.max(1, Math.ceil(timelineDuration * fps))
@@ -363,6 +388,31 @@ function VideoEditor({ assets, onBack }: { assets: VideoAsset[]; onBack: () => v
           </button>
         </div>
       </header>
+
+      <div className="video-risk-meter" aria-label={`개인정보 보호 상태 ${riskLevel.label}, ${protectionProgress}% 가림`}>
+        <div className="video-risk-copy">
+          <span>개인정보 보호 진행률</span>
+          <strong>{protectionProgress}%</strong>
+        </div>
+        <div className="video-risk-track" aria-hidden="true">
+          <div className="video-risk-track-bar">
+            <span className="video-risk-track-gradient" />
+            <span className="video-risk-track-marker" style={{ left: `clamp(10px, ${protectionProgress}%, calc(100% - 10px))` }}>
+              <span className="video-risk-track-marker-line" />
+            </span>
+          </div>
+          <div className="video-risk-track-scale">
+            {videoRiskLevels.map((level) => (
+              <span key={level.key} className={riskLevel.key === level.key ? 'active' : ''}>
+                {level.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <p className="video-risk-description">
+          {riskLevel.description} · {protectedRegionCount}/{totalRiskRegionCount}개 가림
+        </p>
+      </div>
 
       <div className="video-preview-stage">
         <div className="video-preview-frame">
