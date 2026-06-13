@@ -57,22 +57,32 @@
   justify-content: center;
   color: #0b0b0b;
   text-decoration: none;
-  font-size: 2.6rem;
-  line-height: 1;
+}
+
+.icon-button svg {
+  width: 28px;
+  height: 28px;
+  display: block;
 }
 
 .album-title {
   justify-self: center;
-  font-size: 1.32rem;
-  font-weight: 900;
+  font-size: 1.25rem;
+  font-weight: 500;
   letter-spacing: 0;
+  text-align: center;
 }
 
 .text-button {
   justify-self: end;
-  color: #05bced;
-  font-size: 1.18rem;
-  font-weight: 800;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid #049b7e;
+  border-radius: 999px;
+  color: #049b7e;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .gallery-banner {
@@ -82,7 +92,7 @@
   background: #ff1461;
   color: #fff;
   font-size: 1.05rem;
-  font-weight: 900;
+  font-weight: 500;
   cursor: pointer;
 }
 
@@ -115,48 +125,45 @@
 }
 
 .gallery-grid {
+  --gallery-columns: 3;
+  --gallery-column-gap: 0px;
+  --gallery-row-gap: 0px;
+  --gallery-inline-padding: 4px;
+  --gallery-tile-size: calc((390px - (var(--gallery-inline-padding) * 2) - (var(--gallery-column-gap) * (var(--gallery-columns) - 1))) / var(--gallery-columns));
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(var(--gallery-columns), var(--gallery-tile-size));
   align-content: start;
-  gap: 3px;
-  padding-top: 10px;
+  justify-content: center;
+  column-gap: var(--gallery-column-gap);
+  row-gap: var(--gallery-row-gap);
+  padding: 12px var(--gallery-inline-padding) 24px;
   background: #fff;
   overflow-y: auto;
 }
 
 .gallery-tile {
+  display: block;
   position: relative;
-  aspect-ratio: 1 / 1;
-  border: 0;
+  width: var(--gallery-tile-size);
+  height: var(--gallery-tile-size);
+  border: 4px solid #fff;
+  box-sizing: border-box;
   padding: 0;
-  background: #e5e7eb;
+  background: #fff;
   overflow: hidden;
   cursor: pointer;
 }
 
 .gallery-tile img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center;
   display: block;
-}
-
-.gallery-tile span {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  color: #fff;
-  font-size: 0.76rem;
-  font-weight: 800;
-  text-align: left;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .editor-page {
