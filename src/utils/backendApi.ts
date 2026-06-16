@@ -8,7 +8,7 @@ import type {
   VideoAnalyzeResponse,
 } from '../types/api'
 
-const DEFAULT_API_BASE_URL = 'http://192.168.10.253:8080'
+const DEFAULT_API_BASE_URL = 'http://192.168.8.156:8080'
 const DEFAULT_API_USER_ID = '20f420fd-a35e-4c8d-9d7e-8cc38870a6d9'
 const USER_ID_STORAGE_KEY = 'catchcatch:api-user-id:v1'
 
